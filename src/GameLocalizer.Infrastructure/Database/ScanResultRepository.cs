@@ -73,7 +73,7 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
         Bind(command, session); command.Parameters.AddWithValue("$min", query.MinimumConfidence);
         command.Parameters.AddWithValue("$search", query.Search); command.Parameters.AddWithValue("$file", query.File); command.Parameters.AddWithValue("$status", query.Status);
         command.Parameters.AddWithValue("$filter", query.Filter);
-        return "Session=$session AND (($filter IN ('Сомнительные','Технические')) OR Confidence >= $min) AND (CASE $filter WHEN 'Технические' THEN Category='Technical' WHEN 'Сомнительные' THEN Category<>'Technical' AND Confidence<0.85 WHEN 'Выбранные' THEN Selected=1 WHEN 'Высокая уверенность' THEN Category<>'Technical' AND Confidence>=0.85 ELSE Category<>'Technical' AND Confidence>=0.60 END) AND ($status='Все' OR Status=$status) AND ($file='' OR gl_contains(FilePath,$file)) AND ($search='' OR gl_contains(Original,$search) OR gl_contains(Translation,$search) OR gl_contains(EntryKey,$search))";
+        return "Session=$session AND (($filter IN ('Сомнительные','Технические')) OR Confidence >= $min) AND (CASE $filter WHEN 'Технические' THEN Category='Technical' WHEN 'Сомнительные' THEN Category<>'Technical' AND (Confidence<0.85 OR Category NOT IN ('UI','Dialogue','Subtitle','Localization','Quest','Item','Story')) WHEN 'Выбранные' THEN Selected=1 WHEN 'Высокая уверенность' THEN Category IN ('UI','Dialogue','Subtitle','Localization','Quest','Item','Story') AND Confidence>=0.85 ELSE Category<>'Technical' AND Confidence>=0.60 END) AND ($status='Все' OR Status=$status) AND ($file='' OR gl_contains(FilePath,$file)) AND ($search='' OR gl_contains(Original,$search) OR gl_contains(Translation,$search) OR gl_contains(EntryKey,$search))";
     }
     private static ScanRow Read(SqliteDataReader r) => new(r.GetInt64(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetDouble(6), r.GetBoolean(7), r.GetString(8), Enum.Parse<TextCategory>(r.GetString(9)));
     private const string Columns = "Id,FilePath,EntryKey,Original,Translation,Context,Confidence,Selected,Status,Category";
@@ -81,7 +81,7 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
     {
         using var command = db.CreateCommand(); var where = Where(command, session, query);
         using var registration = ct.Register(command.Cancel);
-        command.CommandText = "SELECT COUNT(*),COALESCE(SUM(Selected),0),COALESCE(SUM(Category<>'Technical' AND Confidence>=0.85),0),COALESCE(SUM(Category<>'Technical' AND Confidence<0.85),0),COALESCE(SUM(Category='Technical'),0) FROM ScanRows WHERE Session=$session";
+        command.CommandText = "SELECT COUNT(*),COALESCE(SUM(Selected),0),COALESCE(SUM(Category IN ('UI','Dialogue','Subtitle','Localization','Quest','Item','Story') AND Confidence>=0.85),0),COALESCE(SUM(Category<>'Technical' AND (Confidence<0.85 OR Category NOT IN ('UI','Dialogue','Subtitle','Localization','Quest','Item','Story'))),0),COALESCE(SUM(Category='Technical'),0) FROM ScanRows WHERE Session=$session";
         long total, selected, userText, doubtful, technical;
         using (var reader = command.ExecuteReader()) { reader.Read(); total = reader.GetInt64(0); selected = reader.GetInt64(1); userText = reader.GetInt64(2); doubtful = reader.GetInt64(3); technical = reader.GetInt64(4); }
         command.CommandText = "SELECT COUNT(*) FROM ScanRows WHERE " + where;

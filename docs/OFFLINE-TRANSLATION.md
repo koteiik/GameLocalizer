@@ -53,3 +53,13 @@ dotnet run --project tools/GameLocalizer.Smoke -c Release -r win-x64 -- artifact
 The tool downloads/verifies the pinned model once, blocks HTTP during inference, translates Hello / Continue / Settings / New Game / dialogue and placeholders, recreates the memory service, checks zero inference on repeat, checks unloading, applies to synthetic JSON and restores exact original bytes. `--replay` runs a fresh process against the last saved identity and asserts zero model loads/calls. `--gpu` tests GPU attempt and fallback, not guaranteed acceleration.
 
 **Перевод выполняется один раз и сохраняется. Повторный запуск игры не запускает модель и не расходует ресурсы на повторный перевод.**
+
+## v0.2.1 source-selection hotfix
+
+ModInfrastructure / ToolConfiguration resources are listed but never extracted or automatically translated. This includes BepInEx/config/core/plugins/patchers/Launcher, MelonLoader, Mods, modloader, doorstop_config.ini, winhttp configuration files and AutoTranslator/XUnity.AutoTranslator configuration.
+
+Mod trees are still traversed: known writable localization formats under explicit Translation/Translations/Localization/Language/Text directories remain eligible, including BepInEx/Translation/en/Text/dialogue.txt. Normal format parsing, size bounds and text heuristics still apply. Selecting BepInEx/config itself does not bypass classification.
+
+Font names, shortcut/enum/plugin/version/regex keys, option lists and escaped Unicode values receive technical scores in configuration context, not a global vocabulary blacklist. INI outside explicit localization directories is penalized; CFG/CONFIG remain non-extractable formats.
+
+Automatic selection requires BOTH confidence >=85% and UI/Dialogue/Subtitle/Localization/Quest/Item/Story. Possible means uncertain: visible for review, never automatically selected. It can be manually selected. High-confidence Possible belongs to the doubtful counter/filter. Rescan after upgrading; old translation memory is retained, but excluded configuration files no longer reach Preview/Apply. Existing backups can still be restored.

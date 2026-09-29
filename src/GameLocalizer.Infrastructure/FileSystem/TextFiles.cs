@@ -40,10 +40,11 @@ public sealed class ResourceScanner(IEnumerable<ILocalizationAdapter> adapters)
             yield return new(root, "Directory", false, "Технический каталог: содержимое не сканируется", ResourceKind.EngineRuntime);
             yield break;
         }
-        foreach (var path in SafeTree.Enumerate(root, ct, descend: p => !ResourceClassifier.IsRuntimePath(Path.GetRelativePath(root, p))))
+        foreach (var path in SafeTree.Enumerate(root, ct, descend: p => !ResourceClassifier.IsRuntimePath(p)))
         {
             ct.ThrowIfCancellationRequested();
-            var kind = classifier.Classify(Path.GetRelativePath(root, path));
+            // Preserve mod context even when a user selects BepInEx/config itself as the game root.
+            var kind = classifier.Classify(ResourceClassifier.IsModPath(root) ? path : Path.GetRelativePath(root, path));
             if (Directory.Exists(path))
             {
                 if (kind == ResourceKind.EngineRuntime) yield return new(path, "Directory", false, "Технический каталог: содержимое не сканируется", kind);

@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.2.0 adds real offline English → Russian translation with a separately downloaded OPUS-MT INT8 model, persistent translation memory and resumable jobs. Review every translation before applying it.
+**Project is in early development.** Version 0.2.1 fixes mod/tool configuration classification and conservative automatic selection. Real offline English → Russian translation, persistent memory and resumable jobs from v0.2.0 are retained. Review every translation before applying it.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -26,13 +26,13 @@ Windows 10/11 x64. Once a release is published: **Releases → Latest → GameLo
 2. **Анализировать** identifies the engine and lists resources, including formats needing future adapters.
 3. **Найти текст** extracts likely player-visible strings. No files are modified.
 4. In **Настройки**, select **Offline** and download the model once (108.5 MiB). Click **Перевести**, review the preflight counts and choose **Тест 20 строк** or start the job. Double-click a Russian cell to edit it; manual edits persist and override machine translations.
-5. Review selection, placeholders and errors. Use **← Назад / Далее →** to change pages. Search, filters and the sorting selector operate on the entire database. **Выбрать страницу / Снять страницу** change only the loaded page; other pages keep their selection. Category identifies the source. Automatic selection requires confidence ≥85%; 60–84% is visible but unselected. **Все** hides technical rows and confidence <60%; **Сомнительные** shows nontechnical rows below 85%, and **Технические** shows rejected values found inside otherwise eligible resources. These two audit filters ignore the confidence slider. Technical rows cannot be selected. Status, search and file filters still apply.
+5. Review selection, placeholders and errors. Use **← Назад / Далее →** to change pages. Search, filters and the sorting selector operate on the entire database. **Выбрать страницу / Снять страницу** change only the loaded page; other pages keep their selection. Category identifies the source. Automatic selection requires confidence ≥85% AND category UI, Dialogue, Subtitle, Localization, Quest, Item or Story. Possible is visible but never automatically selected, even at 100%; select it manually only after reviewing it. **Все** hides technical rows and confidence <60%; **Сомнительные** shows nontechnical rows below 85% and all Possible rows, and **Технические** shows rejected values found inside otherwise eligible resources. These two audit filters ignore the confidence slider. Technical rows cannot be selected. Status, search and file filters still apply.
 6. Close the game, then **Применить**. Translation and application process all selected rows across all pages, including rows hidden by filters. Every selected translation must be valid. Manual edits are flushed to the scan cache before paging or applying.
 7. **Восстановить** returns every backed-up file to its original bytes. Keep the backup folder.
 
 Try a **copy** of `samples/SampleGames/Demo` first. For a large scan, run `samples/SampleGames/LargeSynthetic/Generate.ps1` to create 120,005 rows in `artifacts/large-synthetic`. Use `samples/SampleGames/UnitySynthetic` for the Unity filtering regression fixture (12 technical values excluded from selection, 10 player-facing values selected, 2 uncertain words unselected). Samples are synthetic and contain no commercial game assets.
 
-Counters cover extracted values across all pages: **Пользовательский текст** means high confidence (≥85%), **Сомнительные** means lower-confidence nontechnical values, and **Технические** means rejected values. Their sum equals **Найдено всего**. Excluded runtime directories are never traversed and documentation XML is not extracted; their unknown string counts are not invented or included. See the resource catalog for excluded sources.
+Counters cover extracted values across all pages: **Пользовательский текст** means high confidence (≥85%) with an eligible game-text category, **Сомнительные** means other nontechnical values including Possible, and **Технические** means rejected values. Their sum equals **Найдено всего**. Excluded runtime directories are never traversed and documentation XML is not extracted; their unknown string counts are not invented or included. See the resource catalog for excluded sources.
 
 ## Supported Launchers
 Steam (registry, default installation and VDF libraries); manual folders. Epic, GOG and Xbox are future integrations through `IGameDiscoveryService`.

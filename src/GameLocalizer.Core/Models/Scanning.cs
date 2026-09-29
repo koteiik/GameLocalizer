@@ -1,6 +1,6 @@
 namespace GameLocalizer.Core.Models;
 
-public enum TextCategory { UI, Dialogue, Subtitle, Localization, Possible, Technical, Names }
+public enum TextCategory { UI, Dialogue, Subtitle, Localization, Possible, Technical, Names, Quest, Item, Story }
 public record ScanEntry(string FilePath, string Key, string Original, string Context, double Confidence, bool Selected, TextCategory Category = TextCategory.Possible);
 public record ScanProgress(long FilesVisited, long Candidates, long Processed, long SkippedFiles, long Selected = 0);
 public record ScanBatch(Resource Resource, string? SourceHash, IReadOnlyList<ScanEntry> Entries, ScanProgress Progress);

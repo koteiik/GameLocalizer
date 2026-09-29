@@ -31,18 +31,19 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
             }
             var frequencies = entries.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
             var relative = Path.GetRelativePath(root, resource.Path);
-            var isConfiguration = Path.GetExtension(relative).Equals(".ini", StringComparison.OrdinalIgnoreCase);
+            var isConfiguration = ResourceClassifier.IsConfiguration(relative);
             var buffer = new List<ScanEntry>(BatchSize);
             foreach (var entry in entries)
             {
                 ct.ThrowIfCancellationRequested(); processed++;
-                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration, resource.Kind, entry.Context);
+                var sourcePath = ResourceClassifier.IsModPath(root) ? resource.Path : relative;
+                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration, resource.Kind, entry.Context, sourcePath, entry.Key);
                 // Retain rejected strings for the explicit technical audit filter, never for translation.
                 if (!string.IsNullOrWhiteSpace(entry.Text))
                 {
                     candidates++;
                     var category = confidence < .35 ? TextCategory.Technical : ResourceClassifier.Category(resource.Kind);
-                    var autoSelected = confidence >= .85 && category != TextCategory.Technical;
+                    var autoSelected = ResourceClassifier.CanAutoSelect(confidence, category);
                     if (autoSelected) selected++;
                     buffer.Add(new(relative, entry.Key, entry.Text, entry.Context, confidence, autoSelected, category));
                 }

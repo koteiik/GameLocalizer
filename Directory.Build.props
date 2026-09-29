@@ -1,1 +1,1 @@
-<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.0</Version><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>
+<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.1</Version><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>

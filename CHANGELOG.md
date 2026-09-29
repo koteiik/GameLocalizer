@@ -6,6 +6,16 @@
 ### Changed
 ### Fixed
 
+## [0.2.1]
+
+### Fixed
+- Classify BepInEx, MelonLoader, Mods, modloader and translator/launcher configurations as ModInfrastructure or ToolConfiguration, never automatic translation sources.
+- Continue traversing mod directories to retain known localization formats under explicit Translation/Translations/Localization/Language/Text directories.
+- Reject fonts, escape/regex values, option lists, shortcuts and tool metadata in configuration context; lower confidence for INI outside explicit localization directories.
+- AutoSelect now requires confidence >=85% AND UI/Dialogue/Subtitle/Localization/Quest/Item/Story source category. Possible remains visible but unselected.
+- Include high-confidence Possible rows in doubtful counters/filters; preserve explicit manual selection and the v0.2.0 offline translation architecture.
+- Add synthetic regression coverage for mod configuration exclusions, localization exceptions, root selection and automatic translation boundaries.
+
 ## [0.2.0]
 
 ### Added

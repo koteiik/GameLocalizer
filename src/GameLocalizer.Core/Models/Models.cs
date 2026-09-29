@@ -18,7 +18,7 @@ public sealed class Game(string id, string name, string path, string platform, s
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public override string ToString() => $"{Name} · {Platform}";
 }
-public enum ResourceKind { LocalizationCandidate, DialogueResource, SubtitleResource, UIResource, PossibleTextResource, TechnicalDocumentation, AssemblyMetadata, EngineRuntime, TechnicalFile, LogFile, Binary, Unknown }
+public enum ResourceKind { LocalizationCandidate, DialogueResource, SubtitleResource, UIResource, PossibleTextResource, TechnicalDocumentation, AssemblyMetadata, EngineRuntime, TechnicalFile, LogFile, Binary, Unknown, ModInfrastructure, ToolConfiguration, QuestResource, ItemResource, StoryResource }
 public record Resource(string Path, string Format, bool Editable, string Detail, ResourceKind Kind = ResourceKind.PossibleTextResource);
 public record TextEntry(string Key, string Text, string Context = "");
 public record TranslationItem(string Id, string Text, string Context, string Category = "Possible", string Key = "");
