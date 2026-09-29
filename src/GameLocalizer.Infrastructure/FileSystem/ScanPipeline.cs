@@ -1,0 +1,53 @@
+using System.Runtime.CompilerServices;
+using GameLocalizer.Core.Detection;
+using GameLocalizer.Core.Interfaces;
+using GameLocalizer.Core.Models;
+using Microsoft.Extensions.Logging;
+
+namespace GameLocalizer.Infrastructure.FileSystem;
+
+public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizationAdapter> adapters, ILogger<ScanPipeline> logger)
+{
+    public const int BatchSize = 1000;
+    public async IAsyncEnumerable<ScanBatch> ScanAsync(string root, [EnumeratorCancellation] CancellationToken ct)
+    {
+        long files = 0, processed = 0, candidates = 0, skipped = 0, selected = 0;
+        var detector = new TextCandidateDetector();
+        // Enumeration/extraction is consumed on a worker by the UI; only one bounded file is parsed at once.
+        foreach (var resource in scanner.Enumerate(root, ct))
+        {
+            ct.ThrowIfCancellationRequested(); files++;
+            TextFile? snapshot = null; IReadOnlyList<TextEntry> entries = [];
+            if (resource.Editable)
+            {
+                try
+                {
+                    snapshot = await TextFiles.ReadAsync(resource.Path, ct);
+                    var adapter = adapters.First(a => a.CanHandle(resource.Path));
+                    entries = adapter.Extract(snapshot.Text);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or System.Text.DecoderFallbackException)
+                { skipped++; logger.LogWarning("Skipped scan resource {File}: {Type}", Path.GetFileName(resource.Path), e.GetType().Name); }
+            }
+            var frequencies = entries.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
+            var relative = Path.GetRelativePath(root, resource.Path);
+            var isConfiguration = Path.GetExtension(relative).Equals(".ini", StringComparison.OrdinalIgnoreCase);
+            var buffer = new List<ScanEntry>(BatchSize);
+            foreach (var entry in entries)
+            {
+                ct.ThrowIfCancellationRequested(); processed++;
+                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration);
+                if (confidence >= .35)
+                {
+                    candidates++;
+                    if (confidence >= .6) selected++;
+                    buffer.Add(new(relative, entry.Key, entry.Text, entry.Context, confidence, confidence >= .6));
+                }
+                if (processed % BatchSize != 0) continue;
+                yield return new(resource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
+                buffer.Clear();
+            }
+            yield return new(resource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
+        }
+    }
+}

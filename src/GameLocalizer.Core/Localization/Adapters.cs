@@ -18,10 +18,16 @@ public abstract class SpanAdapter : ILocalizationAdapter
     public string ApplyTranslations(string text, IReadOnlyDictionary<string, string> translations)
     {
         var spans = Parse(text);
-        if (translations.Keys.Any(k => spans.All(s => s.Key != k))) throw new InvalidDataException("Unknown translation key");
-        var result = new StringBuilder(text);
-        foreach (var s in spans.OrderByDescending(s => s.Start))
-            if (translations.TryGetValue(s.Key, out var value)) result.Remove(s.Start, s.Length).Insert(s.Start, s.Encode(value));
+        var keys = spans.Select(s => s.Key).ToHashSet(StringComparer.Ordinal);
+        if (translations.Keys.Any(k => !keys.Contains(k))) throw new InvalidDataException("Unknown translation key");
+        var result = new StringBuilder(text.Length); var position = 0;
+        foreach (var s in spans.OrderBy(s => s.Start))
+        {
+            if (!translations.TryGetValue(s.Key, out var value)) continue;
+            result.Append(text, position, s.Start - position).Append(s.Encode(value));
+            position = s.Start + s.Length;
+        }
+        result.Append(text, position, text.Length - position);
         return result.ToString();
     }
     public virtual bool Validate(string original, string modified, IReadOnlyDictionary<string, string> translations)
@@ -46,13 +52,14 @@ public sealed class JsonLocalizationAdapter : SpanAdapter
         using var document = JsonDocument.Parse(bytes); // Reject invalid documents before extracting offsets.
         var reader = new Utf8JsonReader(bytes);
         var result = new List<TextSpan>();
-        var key = ""; var index = 0;
+        var key = ""; var index = 0; var byteOffset = 0; var charOffset = 0;
         while (reader.Read())
         {
             if (reader.TokenType == JsonTokenType.PropertyName) key = reader.GetString()!;
             if (reader.TokenType != JsonTokenType.String) continue;
-            var start = Encoding.UTF8.GetCharCount(bytes.AsSpan(0, (int)reader.TokenStartIndex));
+            var start = charOffset + Encoding.UTF8.GetCharCount(bytes.AsSpan(byteOffset, (int)reader.TokenStartIndex - byteOffset));
             var length = Encoding.UTF8.GetCharCount(bytes.AsSpan((int)reader.TokenStartIndex, (int)(reader.BytesConsumed - reader.TokenStartIndex)));
+            byteOffset = (int)reader.BytesConsumed; charOffset = start + length;
             result.Add(new($"{index++}:{key}", reader.GetString()!, start, length, s => JsonSerializer.Serialize(s)));
         }
         return result;

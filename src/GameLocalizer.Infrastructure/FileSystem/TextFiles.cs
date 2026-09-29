@@ -31,11 +31,22 @@ public static class TextFiles
 }
 public sealed class ResourceScanner(IEnumerable<ILocalizationAdapter> adapters)
 {
-    private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase) { ".txt", ".json", ".xml", ".csv", ".tsv", ".ini", ".yaml", ".yml", ".po", ".lang", ".locale", ".loc", ".strings", ".rpy" };
-    public Task<IReadOnlyList<Resource>> ScanAsync(string root, CancellationToken ct) => Task.Run<IReadOnlyList<Resource>>(() =>
-        SafeTree.Enumerate(root, ct).Where(p => File.Exists(p) && Extensions.Contains(Path.GetExtension(p))).Select(p =>
+    private readonly ResourceClassifier classifier = new();
+    public IEnumerable<Resource> Enumerate(string root, CancellationToken ct)
+    {
+        foreach (var path in SafeTree.Enumerate(root, ct).Where(File.Exists))
         {
-            var adapter = adapters.FirstOrDefault(a => a.CanHandle(p)); var tooLarge = new FileInfo(p).Length > TextFiles.MaxBytes;
-            return new Resource(p, adapter?.Name ?? Path.GetExtension(p), adapter != null && !tooLarge, tooLarge ? "Размер > 4 MiB" : adapter == null ? "Только обнаружение: нужен адаптер" : "Доступен для извлечения");
-        }).ToArray(), ct);
+            ct.ThrowIfCancellationRequested();
+            var kind = classifier.Classify(Path.GetRelativePath(root, path));
+            var adapter = adapters.FirstOrDefault(a => a.CanHandle(path));
+            bool tooLarge;
+            try { tooLarge = new FileInfo(path).Length > TextFiles.MaxBytes; }
+            catch (IOException) { continue; }
+            var candidate = kind is ResourceKind.LocalizationCandidate or ResourceKind.PossibleTextResource;
+            yield return new(path, adapter?.Name ?? Path.GetExtension(path), candidate && adapter != null && !tooLarge,
+                !candidate ? "Исключён по умолчанию" : tooLarge ? "Размер > 4 MiB" : adapter == null ? "Только обнаружение: нужен адаптер" : "Доступен для извлечения", kind);
+        }
+    }
+    // Compatibility API for small callers; the application consumes the streaming pipeline.
+    public Task<IReadOnlyList<Resource>> ScanAsync(string root, CancellationToken ct) => Task.Run<IReadOnlyList<Resource>>(() => Enumerate(root, ct).ToArray(), ct);
 }

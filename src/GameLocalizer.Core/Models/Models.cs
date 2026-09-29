@@ -2,8 +2,14 @@ namespace GameLocalizer.Core.Models;
 
 public enum EngineType { Unknown, Unity, Unreal, Godot, RenPy, RpgMaker }
 public record EngineDetection(EngineType EngineType, double Confidence, IReadOnlyList<string> DetectedEvidence);
-public record Game(string Id, string Name, string Path, string Platform, string? Library = null) : System.ComponentModel.INotifyPropertyChanged
+public sealed class Game(string id, string name, string path, string platform, string? library = null) : System.ComponentModel.INotifyPropertyChanged
 {
+    // WPF Selector stores selected items in a hash table. Identity must not depend on mutable state.
+    public string Id { get; } = id;
+    public string Name { get; } = name;
+    public string Path { get; } = path;
+    public string Platform { get; } = platform;
+    public string? Library { get; } = library;
     private string engine = "Unknown", status = "Не анализирована";
     [System.Text.Json.Serialization.JsonIgnore]
     public string Engine { get => engine; set { engine = value; PropertyChanged?.Invoke(this, new(nameof(Engine))); } }
@@ -12,7 +18,8 @@ public record Game(string Id, string Name, string Path, string Platform, string?
     public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
     public override string ToString() => $"{Name} · {Platform}";
 }
-public record Resource(string Path, string Format, bool Editable, string Detail);
+public enum ResourceKind { LocalizationCandidate, PossibleTextResource, TechnicalFile, LogFile, Binary, Unknown }
+public record Resource(string Path, string Format, bool Editable, string Detail, ResourceKind Kind = ResourceKind.PossibleTextResource);
 public record TextEntry(string Key, string Text, string Context = "");
 public record TranslationItem(string Id, string Text, string Context);
 public record TranslationBatch(IReadOnlyList<TranslationItem> Items);

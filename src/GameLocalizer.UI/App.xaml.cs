@@ -3,6 +3,7 @@ using System.IO;
 using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Localization;
+using GameLocalizer.Core.Models;
 using GameLocalizer.Infrastructure.Database;
 using GameLocalizer.Infrastructure.FileSystem;
 using GameLocalizer.Infrastructure.GameDiscovery;
@@ -28,15 +29,30 @@ public partial class App : Application
         collection.AddSingleton<IEngineDetector, EngineDetector>();
         foreach (var adapter in new ILocalizationAdapter[] { new JsonLocalizationAdapter(), new XmlLocalizationAdapter(), new CsvLocalizationAdapter(), new CsvLocalizationAdapter('\t'), new IniLocalizationAdapter(), new PoLocalizationAdapter(), new PlainTextLocalizationAdapter() }) collection.AddSingleton(adapter);
         collection.AddSingleton<ResourceScanner>(); collection.AddSingleton<BackupService>();
+        collection.AddSingleton<ScanPipeline>(); collection.AddSingleton<ScanWorkspaceService>();
+        collection.AddSingleton(new ScanResultRepository(Path.Combine(data, "scans", "scan-" + Guid.NewGuid().ToString("N") + ".db")));
         collection.AddSingleton<ITranslationProvider, MockTranslationProvider>();
         collection.AddSingleton<ITranslationMemoryService>(new TranslationMemoryService(Path.Combine(data, "memory.db")));
         collection.AddSingleton<TranslationService>(); collection.AddSingleton(new SettingsService(data)); collection.AddSingleton<UpdateService>();
         collection.AddSingleton<MainViewModel>();
         services = collection.BuildServiceProvider();
-        services.GetRequiredService<ILogger<App>>().LogInformation("GameLocalizer v0.1.0 startup");
+        services.GetRequiredService<ILogger<App>>().LogInformation("GameLocalizer {Version} startup", ApplicationVersion.Label);
         var vm = services.GetRequiredService<MainViewModel>();
         var window = new MainWindow { DataContext = vm }; MainWindow = window;
-        window.Closing += (_, args) => { if (vm.Busy) { vm.Cancel(); args.Cancel = true; } };
+        var closing = false;
+        window.Closing += async (_, args) =>
+        {
+            if (closing) return;
+            args.Cancel = true;
+            if (vm.Busy) { vm.Cancel(); return; }
+            try
+            {
+                await vm.ShutdownAsync();
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+                closing = true; window.Close();
+            }
+            catch (Exception ex) { MessageBox.Show("Не удалось сохранить правки: " + ex.Message); }
+        };
         window.Show(); vm.InitializeCommand.Execute(null);
     }
     protected override void OnExit(ExitEventArgs e) { services?.Dispose(); base.OnExit(e); }

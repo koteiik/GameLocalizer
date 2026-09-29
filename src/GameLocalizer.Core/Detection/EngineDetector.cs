@@ -6,7 +6,7 @@ public sealed class EngineDetector : IEngineDetector
 {
     public EngineDetection Detect(string directory, CancellationToken cancellationToken)
     {
-        var files = SafeTree.Enumerate(directory, cancellationToken, 4, 20000).Select(x => Path.GetRelativePath(directory, x)).ToArray();
+        var files = SafeTree.Enumerate(directory, cancellationToken, 4).Take(20000).Select(x => Path.GetRelativePath(directory, x)).ToArray();
         var candidates = new List<EngineDetection>();
         void Check(EngineType type, Func<string, bool> match)
         {
@@ -24,24 +24,33 @@ public sealed class EngineDetector : IEngineDetector
 
 public static class SafeTree
 {
-    public static IEnumerable<string> Enumerate(string root, CancellationToken ct, int maxDepth = 24, int maxEntries = 100000)
+    public static IEnumerable<string> Enumerate(string root, CancellationToken ct, int maxDepth = 24, int maxEntries = int.MaxValue)
     {
-        var pending = new Stack<(string Path, int Depth)>(); pending.Push((root, 0)); int seen = 0;
-        while (pending.TryPop(out var current))
+        var seen = 0;
+        return Walk(root, 0);
+        IEnumerable<string> Walk(string directory, int depth)
         {
             ct.ThrowIfCancellationRequested();
-            string[] entries;
-            try { entries = Directory.GetFileSystemEntries(current.Path); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
-            foreach (var entry in entries)
+            IEnumerator<string>? entries = null;
+            try { entries = Directory.EnumerateFileSystemEntries(directory).GetEnumerator(); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (entries == null) yield break;
+            using (entries)
+            while (true)
             {
                 ct.ThrowIfCancellationRequested();
+                bool next;
+                try { next = entries.MoveNext(); }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException) { break; }
+                if (!next) break;
+                var entry = entries.Current;
                 if (++seen > maxEntries) throw new IOException("Превышен лимит количества файлов; выберите меньшую папку.");
                 FileAttributes attributes;
-                try { attributes = File.GetAttributes(entry); } catch (IOException) { continue; }
+                try { attributes = File.GetAttributes(entry); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
                 if (attributes.HasFlag(FileAttributes.ReparsePoint) || Path.GetFileName(entry).Equals("GameLocalizer_Backup", StringComparison.OrdinalIgnoreCase)) continue;
                 yield return entry;
-                if (attributes.HasFlag(FileAttributes.Directory) && current.Depth < maxDepth) pending.Push((entry, current.Depth + 1));
+                if (attributes.HasFlag(FileAttributes.Directory) && depth < maxDepth)
+                    foreach (var child in Walk(entry, depth + 1)) yield return child;
             }
         }
     }

@@ -3,19 +3,17 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
-using System.Windows.Data;
 using System.Windows.Input;
-using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Models;
-using GameLocalizer.Core.Validation;
+using GameLocalizer.Infrastructure.Database;
 using GameLocalizer.Infrastructure.FileSystem;
-using GameLocalizer.Infrastructure.TranslationProviders;
 using GameLocalizer.Infrastructure.Update;
 using GameLocalizer.UI.Commands;
 using GameLocalizer.UI.Views;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
+
 namespace GameLocalizer.UI.ViewModels;
 
 public sealed class MainViewModel : Observable
@@ -23,34 +21,75 @@ public sealed class MainViewModel : Observable
     private readonly IGameDiscoveryService discovery;
     private readonly IEngineDetector detector;
     private readonly ResourceScanner scanner;
-    private readonly ILocalizationAdapter[] adapters;
+    private readonly ScanResultRepository repository;
+    private readonly ScanWorkspaceService workspace;
     private readonly BackupService backup;
-    private readonly TranslationService translator;
     private readonly SettingsService settingsService;
     private readonly UpdateService updater;
     private readonly ILogger<MainViewModel> logger;
-    private readonly Dictionary<string, TextFile> snapshots = new(StringComparer.OrdinalIgnoreCase);
-    private CancellationTokenSource? cancellation;
+    private readonly SemaphoreSlim editGate = new(1, 1);
+    private readonly Dictionary<(string Session, long Id), ScanEdit> edits = [];
+    private CancellationTokenSource? cancellation, pageCancellation, editCancellation;
+    private long selectionVersion, operationVersion, pageVersion;
     private Game? game;
+    private string? session;
     private bool busy;
-    private string status = "Готово", engine = "Unknown", search = "", fileFilter = "", mode = "Все";
+    private string status = "Готово", engine = "Unknown", search = "", fileFilter = "", mode = "Все", progressText = "";
     private double minimumConfidence = .5;
+    private int pageIndex;
+    private long totalCount, matchingCount, selectedCount;
+    private ScanSort sort;
+    private bool descending;
+    private sealed record Operation(Game? Game, long SelectionVersion, long OperationVersion, string? Session);
     public ObservableCollection<Game> Games { get; } = [];
     public ObservableCollection<Resource> Resources { get; } = [];
     public ObservableCollection<TranslationRow> Rows { get; } = [];
-    public ICollectionView RowsView { get; }
     public AppSettings Settings { get; }
+    public string WindowTitle => "GameLocalizer " + ApplicationVersion.Label;
+    public string VersionDescription => ApplicationVersion.Label + " · Русская локализация игр · Ранний MVP";
     public string[] Modes { get; } = ["Все", "Не переведено", "Validation Error"];
-    public Game? SelectedGame { get => game; set { if (Busy) return; Set(ref game, value); Rows.Clear(); Resources.Clear(); snapshots.Clear(); Engine = "Unknown"; Changed(nameof(HasGame)); CommandManager.InvalidateRequerySuggested(); } }
-    public bool HasGame => SelectedGame != null;
+    public ScanSort[] Sorts { get; } = Enum.GetValues<ScanSort>();
+    public Task PreviewTask { get; private set; } = Task.CompletedTask;
+    public Task EditSaveTask { get; private set; } = Task.CompletedTask;
+    public Game? SelectedGame
+    {
+        get => game;
+        set
+        {
+            if (ReferenceEquals(game, value)) return;
+            selectionVersion++;
+            cancellation?.Cancel();
+            pageCancellation?.Cancel();
+            EditSaveTask = SaveEditsSafelyAsync();
+            Set(ref game, value);
+            session = null;
+            ClearPreview();
+            Resources.Clear();
+            Engine = value?.Engine ?? "Unknown";
+            Status = value == null ? "Выберите игру" : "Выбрана игра: " + value.Name;
+            ProgressText = "";
+            Changed(nameof(HasGame));
+            CommandManager.InvalidateRequerySuggested();
+        }
+    }
+    public bool HasGame => game != null;
     public bool Busy { get => busy; private set { Set(ref busy, value); Changed(nameof(Idle)); CommandManager.InvalidateRequerySuggested(); } }
     public bool Idle => !Busy;
     public string Status { get => status; private set => Set(ref status, value); }
     public string Engine { get => engine; private set => Set(ref engine, value); }
-    public string Search { get => search; set { Set(ref search, value); RowsView.Refresh(); } }
-    public string FileFilter { get => fileFilter; set { Set(ref fileFilter, value); RowsView.Refresh(); } }
-    public string Mode { get => mode; set { Set(ref mode, value); RowsView.Refresh(); } }
-    public double MinimumConfidence { get => minimumConfidence; set { Set(ref minimumConfidence, value); RowsView.Refresh(); } }
+    public string ProgressText { get => progressText; private set => Set(ref progressText, value); }
+    public string Search { get => search; set { if (search == value) return; Set(ref search, value); FilterChanged(); } }
+    public string FileFilter { get => fileFilter; set { if (fileFilter == value) return; Set(ref fileFilter, value); FilterChanged(); } }
+    public string Mode { get => mode; set { if (mode == value) return; Set(ref mode, value); FilterChanged(); } }
+    public double MinimumConfidence { get => minimumConfidence; set { if (minimumConfidence == value) return; Set(ref minimumConfidence, value); FilterChanged(); } }
+    public ScanSort Sort { get => sort; set { Set(ref sort, value); FilterChanged(); } }
+    public bool Descending { get => descending; set { Set(ref descending, value); FilterChanged(); } }
+    public long TotalCount { get => totalCount; private set { Set(ref totalCount, value); Changed(nameof(Counters)); } }
+    public long MatchingCount { get => matchingCount; private set { Set(ref matchingCount, value); Changed(nameof(PageSummary)); CommandManager.InvalidateRequerySuggested(); } }
+    public long SelectedCount { get => selectedCount; private set { Set(ref selectedCount, value); Changed(nameof(Counters)); CommandManager.InvalidateRequerySuggested(); } }
+    public int PageIndex => pageIndex;
+    public string Counters => $"Найдено: {TotalCount:N0}   Показано: {Rows.Count:N0}   Выбрано: {SelectedCount:N0}";
+    public string PageSummary => MatchingCount == 0 ? "Нет совпадений" : $"{pageIndex * ScanResultRepository.PageSize + 1:N0}–{pageIndex * ScanResultRepository.PageSize + Rows.Count:N0} из {MatchingCount:N0}";
     public ICommand InitializeCommand { get; }
     public ICommand AddCommand { get; }
     public ICommand AnalyzeCommand { get; }
@@ -64,148 +103,244 @@ public sealed class MainViewModel : Observable
     public ICommand IssuesCommand { get; }
     public ICommand SelectVisibleCommand { get; }
     public ICommand ClearVisibleCommand { get; }
+    public ICommand NextPageCommand { get; }
+    public ICommand PreviousPageCommand { get; }
 
     public MainViewModel(IGameDiscoveryService discovery, IEngineDetector detector, ResourceScanner scanner,
-        IEnumerable<ILocalizationAdapter> adapters, BackupService backup, TranslationService translator,
+        ScanResultRepository repository, ScanWorkspaceService workspace, BackupService backup,
         SettingsService settingsService, UpdateService updater, ILogger<MainViewModel> logger)
     {
-        this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.adapters = adapters.ToArray();
-        this.backup = backup; this.translator = translator; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
-        Settings = settingsService.Load(); RowsView = CollectionViewSource.GetDefaultView(Rows);
+        this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.repository = repository;
+        this.workspace = workspace; this.backup = backup; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
+        Settings = settingsService.Load();
         foreach (var manual in Settings.ManualGames.Where(g => Directory.Exists(g.Path))) Games.Add(manual);
-        RowsView.Filter = obj => obj is TranslationRow row && row.Confidence >= MinimumConfidence &&
-            (Mode == "Все" || row.Status == Mode) && row.File.Contains(FileFilter, StringComparison.OrdinalIgnoreCase) &&
-            (row.Original.Contains(Search, StringComparison.OrdinalIgnoreCase) || row.Russian.Contains(Search, StringComparison.OrdinalIgnoreCase) || row.Key.Contains(Search, StringComparison.OrdinalIgnoreCase));
-        InitializeCommand = new AsyncCommand(() => Run(async ct =>
+        InitializeCommand = new AsyncCommand(RefreshGamesAsync, () => Idle);
+        AddCommand = new RelayCommand(AddFolder, () => Idle);
+        AnalyzeCommand = new AsyncCommand(AnalyzeSelectedAsync, () => Idle && HasGame);
+        FindCommand = new AsyncCommand(FindSelectedAsync, () => Idle && HasGame);
+        TranslateCommand = new AsyncCommand(TranslateSelectedAsync, () => Idle && session != null && SelectedCount > 0);
+        ApplyCommand = new AsyncCommand(() => Run(async (op, ct) =>
         {
-            foreach (var found in await discovery.DiscoverAsync(ct)) if (Games.All(g => g.Path != found.Path)) Games.Add(found);
-            Status = $"Найдено игр: {Games.Count}. Можно добавить папку вручную.";
-            if (Settings.CheckUpdatesOnStartup && await updater.CheckAsync(Settings.GitHubRepository, ct) is { } release)
-            {
-                var dialog = new UpdateWindow(release.Version) { Owner = Application.Current.MainWindow };
-                if (dialog.ShowDialog() == true) Open(release.Url);
-            }
-        }), () => Idle);
-        AddCommand = new RelayCommand(() =>
+            if (op.Game == null || op.Session == null) return;
+            await FlushEditsAsync();
+            ct.ThrowIfCancellationRequested();
+            if (MessageBox.Show($"Закройте игру. Применить {SelectedCount:N0} строк из всех страниц?\nСкрытые фильтром выбранные строки тоже включены. Будет создана резервная копия.",
+                "Применить перевод", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+            var changed = await Task.Run(() => workspace.ApplyAsync(op.Game, op.Session, ct), ct);
+            if (IsCurrent(op)) { session = null; ClearPreview(); Status = $"Изменено файлов: {changed}. Оригиналы сохранены; выполните новый анализ."; }
+        }), () => Idle && session != null && SelectedCount > 0);
+        RestoreCommand = new AsyncCommand(() => Run(async (op, ct) =>
         {
-            var dialog = new OpenFolderDialog { Title = "Выберите папку игры" };
-            if (dialog.ShowDialog() != true) return;
-            var path = Path.GetFullPath(dialog.FolderName);
-            var existing = Games.FirstOrDefault(g => g.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-            if (existing != null) { SelectedGame = existing; return; }
-            var added = new Game("manual:" + Infrastructure.Database.TranslationMemoryService.Hash(path.ToUpperInvariant()), Path.GetFileName(path), path, "Manual");
-            Games.Add(added); SelectedGame = added; Settings.ManualGames.Add(added);
-            try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = "Не удалось сохранить список папок"; }
-        }, () => Idle);
-        AnalyzeCommand = new AsyncCommand(() => Run(Analyze), () => Idle && HasGame);
-        FindCommand = new AsyncCommand(() => Run(Find), () => Idle && HasGame);
-        TranslateCommand = new AsyncCommand(() => Run(Translate), () => Idle && Rows.Count > 0);
-        ApplyCommand = new AsyncCommand(() => Run(Apply), () => Idle && Rows.Count > 0);
-        RestoreCommand = new AsyncCommand(() => Run(async ct =>
-        {
-            if (MessageBox.Show("Закройте игру. Восстановить все сохранённые оригиналы?", "Восстановление", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-            await backup.RestoreAsync(SelectedGame!.Path, ct); Rows.Clear(); snapshots.Clear(); Status = "Оригинальные файлы восстановлены. Выполните повторный анализ.";
+            if (op.Game == null || MessageBox.Show("Закройте игру. Восстановить все сохранённые оригиналы?", "Восстановление", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+            await Task.Run(() => backup.RestoreAsync(op.Game.Path, ct), ct);
+            if (IsCurrent(op)) { session = null; ClearPreview(); Status = "Оригинальные файлы восстановлены."; }
         }), () => Idle && HasGame);
         CancelCommand = new RelayCommand(Cancel, () => Busy);
         SettingsCommand = new RelayCommand(() =>
         {
             new SettingsWindow(Settings) { Owner = Application.Current.MainWindow }.ShowDialog();
-            try { settingsService.Save(Settings); } catch (IOException e) { Status = e.Message; }
+            try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = e.Message; }
         }, () => Idle);
         AboutCommand = new RelayCommand(() => new AboutWindow(Settings.GitHubRepository) { Owner = Application.Current.MainWindow }.ShowDialog());
-        IssuesCommand = new RelayCommand(() => OpenRepository("issues"));
-        SelectVisibleCommand = new RelayCommand(() => { foreach (TranslationRow r in RowsView) r.Selected = true; }, () => Idle);
-        ClearVisibleCommand = new RelayCommand(() => { foreach (TranslationRow r in RowsView) r.Selected = false; }, () => Idle);
+        IssuesCommand = new RelayCommand(() => Open($"https://github.com/{Settings.GitHubRepository}/issues"));
+        SelectVisibleCommand = new RelayCommand(() => { foreach (var row in Rows) row.Selected = true; }, () => Idle);
+        ClearVisibleCommand = new RelayCommand(() => { foreach (var row in Rows) row.Selected = false; }, () => Idle);
+        NextPageCommand = new AsyncCommand(() => ChangePageAsync(pageIndex + 1), () => Idle && ((long)pageIndex + 1) * ScanResultRepository.PageSize < MatchingCount);
+        PreviousPageCommand = new AsyncCommand(() => ChangePageAsync(pageIndex - 1), () => Idle && pageIndex > 0);
     }
+    private void AddFolder()
+    {
+        var dialog = new OpenFolderDialog { Title = "Выберите папку игры" };
+        if (dialog.ShowDialog() != true) return;
+        var path = Path.GetFullPath(dialog.FolderName);
+        var existing = Games.FirstOrDefault(g => SamePath(g.Path, path));
+        if (existing != null) { SelectedGame = existing; return; }
+        var added = new Game("manual:" + TranslationMemoryService.Hash(path.ToUpperInvariant()), Path.GetFileName(path), path, "Manual");
+        Games.Add(added); SelectedGame = added; Settings.ManualGames.Add(added);
+        try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = "Не удалось сохранить список папок"; }
+    }
+    private static bool SamePath(string a, string b) => string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
+    public Task RefreshGamesAsync() => Run(async (op, ct) =>
+    {
+        var found = await discovery.DiscoverAsync(ct);
+        ct.ThrowIfCancellationRequested();
+        // Preserve existing object references, especially the selected instance, across refreshes.
+        foreach (var item in found) if (Games.All(g => !SamePath(g.Path, item.Path))) Games.Add(item);
+        if (IsCurrent(op)) Status = $"В библиотеке игр: {Games.Count}. Выбор сохранён.";
+        if (Settings.CheckUpdatesOnStartup && await updater.CheckAsync(Settings.GitHubRepository, ct) is { } release && IsCurrent(op))
+        {
+            var dialog = new UpdateWindow(release.Version) { Owner = Application.Current.MainWindow };
+            if (dialog.ShowDialog() == true) Open(release.Url);
+        }
+    });
     public void Cancel() => cancellation?.Cancel();
-    private async Task Run(Func<CancellationToken, Task> action)
+    private bool IsCurrent(Operation op) => op.SelectionVersion == selectionVersion && op.OperationVersion == operationVersion && ReferenceEquals(op.Game, game);
+    private async Task Run(Func<Operation, CancellationToken, Task> action)
     {
-        Busy = true; cancellation = new(); Status = "Выполняется…";
-        try { await action(cancellation.Token); }
-        catch (OperationCanceledException) { Status = "Отменено. Применённые файлы можно восстановить."; }
-        catch (Exception e) { logger.LogError("Operation failed: {Type}", e.GetType().Name); Status = "Ошибка: " + e.Message; MessageBox.Show(Status, "GameLocalizer", MessageBoxButton.OK, MessageBoxImage.Error); }
-        finally { cancellation.Dispose(); cancellation = null; Busy = false; RowsView.Refresh(); }
-    }
-    private async Task Analyze(CancellationToken ct)
-    {
-        Rows.Clear(); snapshots.Clear(); Resources.Clear();
-        var result = await Task.Run(() => detector.Detect(SelectedGame!.Path, ct), ct);
-        Engine = $"{result.EngineType} · {result.Confidence:P0} · {string.Join(", ", result.DetectedEvidence)}";
-        SelectedGame!.Engine = result.EngineType.ToString(); SelectedGame.Status = "Анализ завершён";
-        foreach (var resource in await scanner.ScanAsync(SelectedGame!.Path, ct)) Resources.Add(resource);
-        Status = $"Ресурсов: {Resources.Count}; поддерживаются: {Resources.Count(r => r.Editable)}. Нажмите «Найти текст».";
-        logger.LogInformation("Analysis: {Engine}, {Count} resources", result.EngineType, Resources.Count);
-    }
-    private async Task Find(CancellationToken ct)
-    {
-        if (Resources.Count == 0) await Analyze(ct);
-        Rows.Clear(); snapshots.Clear(); var candidate = new TextCandidateDetector(); int skipped = 0;
-        foreach (var resource in Resources.Where(r => r.Editable))
+        if (Busy) return;
+        var op = new Operation(game, selectionVersion, ++operationVersion, session);
+        using var source = new CancellationTokenSource(); cancellation = source; Busy = true; Status = "Выполняется…";
+        try { await action(op, source.Token); }
+        catch (OperationCanceledException) { if (IsCurrent(op)) Status = "Отменено. Уже найденные строки доступны; применённые файлы можно восстановить."; }
+        catch (Exception e)
         {
-            ct.ThrowIfCancellationRequested(); Status = "Извлечение: " + Path.GetFileName(resource.Path);
-            try
-            {
-                var snapshot = await TextFiles.ReadAsync(resource.Path, ct); var adapter = adapters.First(a => a.CanHandle(resource.Path));
-                var entries = await Task.Run(() => adapter.Extract(snapshot.Text), ct);
-                var frequencies = entries.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
-                var relative = Path.GetRelativePath(SelectedGame!.Path, resource.Path); snapshots[relative] = snapshot;
-                foreach (var entry in entries)
-                {
-                    var confidence = candidate.Score(entry.Text, frequencies[entry.Text]);
-                    if (confidence < .35) continue;
-                    if (Rows.Count >= 50000) throw new IOException("Лимит 50 000 строк. Выберите меньшую папку.");
-                    Rows.Add(new() { Original = entry.Text, File = relative, Key = entry.Key, Context = entry.Context, Confidence = confidence, Selected = confidence >= .6 });
-                    if (Rows.Count % 200 == 0) { await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background); ct.ThrowIfCancellationRequested(); }
-                }
-            }
-            catch (Exception e) when (e is System.Text.Json.JsonException or System.Xml.XmlException or FormatException or System.Text.DecoderFallbackException or InvalidDataException)
-            { skipped++; logger.LogWarning("Skipped text resource: {File}, {Type}", Path.GetFileName(resource.Path), e.GetType().Name); }
+            logger.LogError("Operation failed: {Type}", e.GetType().Name);
+            if (IsCurrent(op)) Status = "Ошибка: " + e.Message;
         }
-        Status = $"Найдено строк: {Rows.Count}; пропущено неподдерживаемых файлов: {skipped}. Игра не изменена.";
-        logger.LogInformation("Extracted {Count} rows, skipped {Skipped}", Rows.Count, skipped);
-        SelectedGame!.Status = $"Строк: {Rows.Count}";
-    }
-    private async Task Translate(CancellationToken ct)
-    {
-        foreach (var group in Rows.Where(r => r.Selected && string.IsNullOrWhiteSpace(r.Russian)).GroupBy(r => r.File))
+        finally
         {
-            ct.ThrowIfCancellationRequested(); Status = "Mock-перевод: " + group.Key;
-            var result = await Task.Run(() => translator.TranslateAsync(SelectedGame!, group.Key, group.Select(r => new TranslationItem(r.Key, r.Original, r.Context)).ToArray(), ct), ct);
-            foreach (var row in group) row.Russian = result[row.Key];
+            var current = IsCurrent(op);
+            operationVersion++; cancellation = null; Busy = false;
+            if (current && session != null) { PreviewTask = RefreshPreviewAsync(); await PreviewTask; }
         }
-        Status = "Mock-перевод готов. [ДЕМО] означает отсутствие реального перевода. Проверьте текст вручную.";
     }
-    private async Task Apply(CancellationToken ct)
+    public Task AnalyzeSelectedAsync() => Run(Analyze);
+    private async Task Analyze(Operation op, CancellationToken ct)
     {
-        var selected = Rows.Where(r => r.Selected).ToArray();
-        if (selected.Length == 0) { Status = "Нет выбранных строк"; return; }
-        if (selected.Any(r => r.Status != "Готово")) throw new InvalidDataException("Выбранные строки содержат пустые переводы или Validation Error.");
-        if (MessageBox.Show($"Закройте игру. Применить {selected.Length} строк?\nБудет создана резервная копия. Проверьте выбранные строки, включая скрытые фильтром.", "Применить перевод", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        var changes = await Task.Run(() =>
+        if (op.Game == null) return;
+        await FlushEditsAsync(); ct.ThrowIfCancellationRequested();
+        if (!IsCurrent(op)) return;
+        session = null; ClearPreview(); Resources.Clear();
+        var result = await Task.Run(() =>
         {
-            var list = new List<FileChange>();
-            foreach (var group in selected.GroupBy(r => r.File))
+            var detected = detector.Detect(op.Game.Path, ct);
+            var catalog = new PriorityQueue<Resource, int>();
+            long count = 0;
+            foreach (var resource in scanner.Enumerate(op.Game.Path, ct))
             {
-                ct.ThrowIfCancellationRequested(); var snapshot = snapshots[group.Key]; var adapter = adapters.First(a => a.CanHandle(group.Key));
-                var translations = group.ToDictionary(r => r.Key, r => r.Russian);
-                foreach (var row in group) if (!new TranslationValidator().Validate(row.Original, row.Russian, out var error)) throw new InvalidDataException(error);
-                var modified = adapter.ApplyTranslations(snapshot.Text, translations);
-                if (!adapter.Validate(snapshot.Text, modified, translations)) throw new InvalidDataException("Structure validation failed: " + group.Key);
-                list.Add(new(group.Key, snapshot.Hash, snapshot.Encode(modified)));
+                count++; catalog.Enqueue(resource, -(int)resource.Kind);
+                if (catalog.Count > ScanResultRepository.PageSize) catalog.Dequeue();
             }
-            return list;
+            return (detected, count, resources: catalog.UnorderedItems.Select(i => i.Element).OrderBy(r => r.Kind).ToArray());
         }, ct);
-        await backup.ApplyAsync(SelectedGame!.Path, changes, ct);
-        Rows.Clear(); snapshots.Clear(); Status = $"Изменено файлов: {changes.Count}. Резервные копии сохранены. Перед следующим переводом выполните анализ.";
+        ct.ThrowIfCancellationRequested();
+        if (!IsCurrent(op)) return;
+        Engine = $"{result.detected.EngineType} · {result.detected.Confidence:P0} · {string.Join(", ", result.detected.DetectedEvidence)}";
+        op.Game.Engine = result.detected.EngineType.ToString(); op.Game.Status = "Анализ завершён";
+        foreach (var resource in result.resources) Resources.Add(resource);
+        Status = $"Просмотрено файлов: {result.count:N0}. Показано ресурсов: {Resources.Count:N0}. Нажмите «Найти текст».";
+        logger.LogInformation("Analysis: {Engine}, {Count} files", result.detected.EngineType, result.count);
+    }
+    public Task FindSelectedAsync() => Run(async (op, ct) =>
+    {
+        if (op.Game == null) return;
+        await Analyze(op, ct);
+        ct.ThrowIfCancellationRequested(); if (!IsCurrent(op)) return;
+        var activeSession = Guid.NewGuid().ToString("N"); session = activeSession;
+        Status = "Сканирование текстовых ресурсов…";
+        var previewRequested = false;
+        var progress = new Progress<ScanProgress>(p =>
+        {
+            if (!IsCurrent(op)) return;
+            ShowScanProgress(p);
+            if (!previewRequested && p.Candidates >= ScanPipeline.BatchSize)
+            { previewRequested = true; PreviewTask = RefreshPreviewAsync(); }
+        });
+        var final = await Task.Run(() => workspace.ScanAsync(op.Game, activeSession, progress, ct), ct);
+        if (!IsCurrent(op)) return;
+        ShowScanProgress(final);
+        op.Game.Status = $"Строк: {final.Candidates:N0}";
+        Status = $"Найдено {final.Candidates:N0} строк. Страница содержит до {ScanResultRepository.PageSize:N0}. Пропущено файлов: {final.SkippedFiles:N0}.";
+        logger.LogInformation("Scan completed: {Files} files, {Rows} candidates, {Processed} processed", final.FilesVisited, final.Candidates, final.Processed);
+    });
+    private void ShowScanProgress(ScanProgress p)
+    {
+        TotalCount = p.Candidates;
+        SelectedCount = p.Selected;
+        ProgressText = $"Просмотрено файлов: {p.FilesVisited:N0} · Потенциальных строк: {p.Candidates:N0} · Обработано строк: {p.Processed:N0}";
+    }
+    public Task TranslateSelectedAsync() => Run(async (op, ct) =>
+    {
+        if (op.Game == null || op.Session == null) return;
+        await FlushEditsAsync(); ct.ThrowIfCancellationRequested();
+        var progress = new Progress<long>(count => { if (IsCurrent(op)) ProgressText = $"Переведено строк: {count:N0} из выбранных на всех страницах"; });
+        await Task.Run(() => workspace.TranslateAsync(op.Game, op.Session, progress, ct), ct);
+        if (IsCurrent(op)) Status = "Mock-перевод готов. [ДЕМО] требует ручного перевода. Проверьте все выбранные страницы.";
+    });
+    private ScanQuery Query() => new(Search, FileFilter, Mode, MinimumConfidence, Sort, Descending);
+    private void ClearPreview()
+    {
+        pageVersion++; Rows.Clear(); pageIndex = 0; TotalCount = MatchingCount = SelectedCount = 0;
+        Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));
+    }
+    private void FilterChanged() { pageIndex = 0; PreviewTask = RefreshPreviewAsync(true); }
+    public Task ChangePageAsync(int index)
+    {
+        pageIndex = Math.Max(0, index); Changed(nameof(PageIndex));
+        return PreviewTask = RefreshPreviewAsync();
+    }
+    public async Task RefreshPreviewAsync(bool debounce = false)
+    {
+        pageCancellation?.Cancel(); pageCancellation?.Dispose();
+        using var source = new CancellationTokenSource(); pageCancellation = source;
+        var token = source.Token; var request = ++pageVersion; var activeSession = session; var version = selectionVersion;
+        var query = Query(); var page = pageIndex;
+        if (activeSession == null) { pageCancellation = null; return; }
+        try
+        {
+            if (debounce) await Task.Delay(200, token);
+            await FlushEditsAsync(); token.ThrowIfCancellationRequested();
+            var result = await repository.QueryAsync(activeSession, query, page, token);
+            if (request != pageVersion || version != selectionVersion || session != activeSession) return;
+            Rows.Clear();
+            foreach (var item in result.Rows)
+            {
+                var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, Key = item.Key, Context = item.Context,
+                    Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation };
+                var lastSelected = row.Selected;
+                row.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName is not (nameof(TranslationRow.Selected) or nameof(TranslationRow.Russian))) return;
+                    edits[(activeSession, row.Id)] = new(row.Id, row.Russian, row.Selected);
+                    if (session == activeSession && row.Selected != lastSelected) SelectedCount += row.Selected ? 1 : -1;
+                    lastSelected = row.Selected;
+                    ScheduleEditSave();
+                };
+                Rows.Add(row);
+            }
+            TotalCount = Busy ? Math.Max(TotalCount, result.Total) : result.Total;
+            MatchingCount = result.Matching; SelectedCount = Busy ? Math.Max(SelectedCount, result.Selected) : result.Selected;
+            Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e)
+        {
+            if (!token.IsCancellationRequested && request == pageVersion && version == selectionVersion) Status = "Ошибка чтения предпросмотра: " + e.Message;
+        }
+        finally { if (ReferenceEquals(pageCancellation, source)) pageCancellation = null; }
+    }
+    private void ScheduleEditSave()
+    {
+        editCancellation?.Cancel(); editCancellation?.Dispose(); editCancellation = new();
+        EditSaveTask = SaveEditsSafelyAsync(editCancellation.Token);
+    }
+    private async Task SaveEditsSafelyAsync(CancellationToken delay = default)
+    {
+        var version = selectionVersion;
+        try { if (delay.CanBeCanceled) await Task.Delay(250, delay); await FlushEditsAsync(); }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { logger.LogError("Preview save failed: {Type}", e.GetType().Name); if (version == selectionVersion) Status = "Не удалось сохранить правки: " + e.Message; }
+    }
+    public async Task FlushEditsAsync()
+    {
+        await editGate.WaitAsync();
+        try
+        {
+            var pending = edits.ToArray();
+            foreach (var group in pending.GroupBy(p => p.Key.Session))
+                await repository.SaveEditsAsync(group.Key, group.Select(p => p.Value).ToArray(), CancellationToken.None);
+            foreach (var item in pending) if (edits.TryGetValue(item.Key, out var current) && current == item.Value) edits.Remove(item.Key);
+        }
+        finally { editGate.Release(); }
+    }
+    public async Task ShutdownAsync()
+    {
+        pageCancellation?.Cancel(); editCancellation?.Cancel();
+        await PreviewTask; await EditSaveTask; await FlushEditsAsync();
     }
     internal static void Open(string url)
     {
         try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); }
         catch (Win32Exception) { MessageBox.Show("Не удалось открыть браузер."); }
-    }
-    private void OpenRepository(string suffix)
-    {
-        if (!UpdateService.ValidRepository(Settings.GitHubRepository)) { MessageBox.Show("Адрес репозитория ещё не настроен. Укажите owner/GameLocalizer в настройках после публикации."); return; }
-        Open($"https://github.com/{Settings.GitHubRepository}/{suffix}");
     }
 }

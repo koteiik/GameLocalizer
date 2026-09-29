@@ -26,12 +26,12 @@ public sealed class UpdateService
         if (!ValidRepository(repository)) return null;
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) }; client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLocalizer/0.1.0");
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) }; client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLocalizer/" + ApplicationVersion.Current);
             using var response = await client.GetAsync($"https://api.github.com/repos/{repository}/releases/latest", ct);
             if (!response.IsSuccessStatusCode) return null;
             using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
             var tag = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
-            return Version.TryParse(tag.TrimStart('v'), out var version) && version > new Version(0, 1, 0)
+            return Version.TryParse(tag.TrimStart('v'), out var version) && version > ApplicationVersion.Current
                 ? (tag, $"https://github.com/{repository}/releases/tag/{Uri.EscapeDataString(tag)}") : null;
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException) { return null; }

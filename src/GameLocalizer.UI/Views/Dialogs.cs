@@ -30,7 +30,7 @@ public sealed class AboutWindow : Window
         Style = (Style)FindResource(typeof(Window));
         Title = "О программе"; Width = 440; Height = 330; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var panel = new StackPanel { Margin = new Thickness(25) }; Content = panel;
-        panel.Children.Add(new TextBlock { Text = "GameLocalizer\nv0.1.0\nMIT License", FontSize = 24, Margin = new Thickness(0, 0, 0, 15) });
+        panel.Children.Add(new TextBlock { Text = "GameLocalizer\n" + ApplicationVersion.Label + "\nMIT License", FontSize = 24, Margin = new Thickness(0, 0, 0, 15) });
         foreach (var (label, suffix) in new[] { ("GitHub", ""), ("Releases", "/releases"), ("License", "/blob/main/LICENSE") })
         {
             var button = new Button { Content = label, IsEnabled = UpdateService.ValidRepository(repository) };

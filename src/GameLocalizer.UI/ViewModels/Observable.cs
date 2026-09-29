@@ -10,6 +10,7 @@ public abstract class Observable : INotifyPropertyChanged
 }
 public sealed class TranslationRow : Observable
 {
+    public long Id { get; init; }
     public required string Original { get; init; }
     public required string File { get; init; }
     public required string Key { get; init; }
