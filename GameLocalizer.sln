@@ -1,0 +1,50 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{112B231C-EF0D-4B57-8D39-E362C601AD9D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.Core", "src\GameLocalizer.Core\GameLocalizer.Core.csproj", "{9F162E86-1B76-439D-A278-BB1DD071D86E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.Infrastructure", "src\GameLocalizer.Infrastructure\GameLocalizer.Infrastructure.csproj", "{113A7EDA-339D-43DB-90FA-40AFC0A63B0C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.UI", "src\GameLocalizer.UI\GameLocalizer.UI.csproj", "{7B6BA50C-37F9-4226-A916-44DD7AB429C6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{D312663A-2644-4F82-AF90-58319D5E15A0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.Tests", "tests\GameLocalizer.Tests\GameLocalizer.Tests.csproj", "{6FBE8600-7C52-47FF-9E18-97D163BEDE29}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9F162E86-1B76-439D-A278-BB1DD071D86E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F162E86-1B76-439D-A278-BB1DD071D86E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F162E86-1B76-439D-A278-BB1DD071D86E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F162E86-1B76-439D-A278-BB1DD071D86E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{113A7EDA-339D-43DB-90FA-40AFC0A63B0C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{113A7EDA-339D-43DB-90FA-40AFC0A63B0C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{113A7EDA-339D-43DB-90FA-40AFC0A63B0C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{113A7EDA-339D-43DB-90FA-40AFC0A63B0C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7B6BA50C-37F9-4226-A916-44DD7AB429C6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7B6BA50C-37F9-4226-A916-44DD7AB429C6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7B6BA50C-37F9-4226-A916-44DD7AB429C6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7B6BA50C-37F9-4226-A916-44DD7AB429C6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FBE8600-7C52-47FF-9E18-97D163BEDE29}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FBE8600-7C52-47FF-9E18-97D163BEDE29}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FBE8600-7C52-47FF-9E18-97D163BEDE29}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FBE8600-7C52-47FF-9E18-97D163BEDE29}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{9F162E86-1B76-439D-A278-BB1DD071D86E} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
+		{113A7EDA-339D-43DB-90FA-40AFC0A63B0C} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
+		{7B6BA50C-37F9-4226-A916-44DD7AB429C6} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
+		{6FBE8600-7C52-47FF-9E18-97D163BEDE29} = {D312663A-2644-4F82-AF90-58319D5E15A0}
+	EndGlobalSection
+EndGlobal

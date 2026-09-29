@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible problem
+body:
+  - type: markdown
+    attributes:
+      value: 'Review logs for personal information before posting. Never attach game files, credentials or API keys.'
+  - type: input
+    id: version
+    attributes: {label: GameLocalizer version}
+    validations: {required: true}
+  - type: input
+    id: windows
+    attributes: {label: Windows version}
+  - type: input
+    id: game
+    attributes: {label: Game}
+  - type: input
+    id: engine
+    attributes: {label: Engine}
+  - type: input
+    id: launcher
+    attributes: {label: Launcher}
+  - type: textarea
+    id: problem
+    attributes: {label: Problem}
+    validations: {required: true}
+  - type: textarea
+    id: steps
+    attributes: {label: Steps}
+    validations: {required: true}
+  - type: textarea
+    id: expected
+    attributes: {label: Expected Result}
+  - type: textarea
+    id: actual
+    attributes: {label: Actual Result}
+  - type: textarea
+    id: logs
+    attributes: {label: Logs, description: 'Check for personal information before posting.'}

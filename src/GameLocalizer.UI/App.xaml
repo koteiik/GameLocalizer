@@ -1,0 +1,11 @@
+<Application x:Class="GameLocalizer.UI.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Application.Resources>
+  <SolidColorBrush x:Key="Panel" Color="#202B3E"/>
+  <Style TargetType="Window"><Setter Property="Background" Value="#121B2A"/><Setter Property="Foreground" Value="#E5ECF5"/><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="13"/></Style>
+  <Style TargetType="Button"><Setter Property="Padding" Value="13,8"/><Setter Property="Margin" Value="3"/><Setter Property="Background" Value="#334B6A"/><Setter Property="Foreground" Value="White"/><Setter Property="BorderThickness" Value="0"/></Style>
+  <Style TargetType="TextBox"><Setter Property="Padding" Value="6"/><Setter Property="Margin" Value="3"/><Setter Property="Background" Value="#202B3E"/><Setter Property="Foreground" Value="#E5ECF5"/><Setter Property="BorderBrush" Value="#485870"/></Style>
+  <Style TargetType="CheckBox"><Setter Property="Margin" Value="8"/><Setter Property="Foreground" Value="#E5ECF5"/></Style>
+  <Style TargetType="DataGrid"><Setter Property="Background" Value="#182335"/><Setter Property="Foreground" Value="#E5ECF5"/><Setter Property="RowBackground" Value="#202B3E"/><Setter Property="AlternatingRowBackground" Value="#263349"/><Setter Property="BorderThickness" Value="0"/><Setter Property="GridLinesVisibility" Value="Horizontal"/><Setter Property="HorizontalGridLinesBrush" Value="#354259"/></Style>
+  <Style TargetType="DataGridColumnHeader"><Setter Property="Background" Value="#334B6A"/><Setter Property="Foreground" Value="White"/><Setter Property="Padding" Value="8"/></Style>
+ </Application.Resources>
+</Application>

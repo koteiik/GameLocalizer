@@ -1,0 +1,10 @@
+{
+  "menu.play": "Start Game",
+  "menu.continue": "Continue",
+  "menu.settings": "Settings",
+  "quest.done": "Quest completed",
+  "dialogue": "I don't think we should go there.",
+  "greeting": "Hello, {player}!",
+  "technical": "Assets/UI/Button",
+  "version": 1
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<strings>
+  <text key="play">Start Game</text>
+  <text key="dialogue">I don't think we should go there.</text>
+  <text key="markup">Hello &lt;b&gt;{name}&lt;/b&gt;!</text>
+</strings>
