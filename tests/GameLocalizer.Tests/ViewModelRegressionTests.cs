@@ -125,6 +125,21 @@ public sealed class ViewModelRegressionTests
         await vm.ShutdownAsync();
     });
     [Fact]
+    public Task ManualEditSurvivesFreshScanAndTranslation() => OnDispatcher(async () =>
+    {
+        using var f = new Fixture(); var vm = f.Vm;
+        vm.SelectedGame = f.First; await vm.FindSelectedAsync();
+        Assert.Single(vm.Rows).Russian = "Начать приключение";
+        await vm.FlushEditsAsync();
+        await vm.FindSelectedAsync();
+        Assert.Equal("Начать приключение", Assert.Single(vm.Rows).Russian);
+        Assert.Equal("Manual", vm.Rows[0].Status);
+        await vm.TranslateSelectedAsync();
+        Assert.Equal("Начать приключение", Assert.Single(vm.Rows).Russian);
+        Assert.Equal("Manual", vm.Rows[0].Status);
+        await vm.ShutdownAsync();
+    });
+    [Fact]
     public Task ViewModelUsesOnlyOnePageAndPersistsOffPageEdits() => OnDispatcher(async () =>
     {
         using var f = new Fixture(); var vm = f.Vm; ScanRegressionTests.Generate(f.First.Path, 100005);

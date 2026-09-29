@@ -14,12 +14,16 @@ public interface ILocalizationAdapter
 public interface ITranslationProvider
 {
     string Name { get; }
+    string ModelName => Name;
+    string ModelVersion => "1";
     Task<TranslationResult> TranslateAsync(TranslationRequest request, CancellationToken cancellationToken);
 }
 public interface ITranslationMemoryService
 {
     Task<string?> FindAsync(string text, string sourceLanguage, string targetLanguage, string gameId, string context, string provider, CancellationToken ct);
     Task SaveAsync(MemoryEntry entry, CancellationToken ct);
+    Task<CachedTranslation?> FindAsync(MemoryKey key, CancellationToken ct);
+    Task<IReadOnlyDictionary<string, CachedTranslation>> FindManyAsync(IReadOnlyList<MemoryKey> keys, CancellationToken ct);
 }
 // Future implementations live outside Core and are registered through dependency injection.
 public interface IScreenCaptureService { Task<byte[]> CaptureAsync(nint window, CancellationToken ct); }

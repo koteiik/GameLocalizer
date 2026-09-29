@@ -21,22 +21,23 @@ public sealed class Game(string id, string name, string path, string platform, s
 public enum ResourceKind { LocalizationCandidate, DialogueResource, SubtitleResource, UIResource, PossibleTextResource, TechnicalDocumentation, AssemblyMetadata, EngineRuntime, TechnicalFile, LogFile, Binary, Unknown }
 public record Resource(string Path, string Format, bool Editable, string Detail, ResourceKind Kind = ResourceKind.PossibleTextResource);
 public record TextEntry(string Key, string Text, string Context = "");
-public record TranslationItem(string Id, string Text, string Context);
+public record TranslationItem(string Id, string Text, string Context, string Category = "Possible", string Key = "");
 public record TranslationBatch(IReadOnlyList<TranslationItem> Items);
 public record TranslationRequest(TranslationBatch Batch, string TargetLanguage = "ru", string SourceLanguage = "auto")
 {
     public const string Instruction = "Translate video game text into Russian. Preserve meaning, style, IDs, placeholders and markup. Keep character names consistent. Return ID to translation mapping.";
 }
-public record TranslationResult(IReadOnlyDictionary<string, string> Translations);
+public record TranslationResult(IReadOnlyDictionary<string, string> Translations, bool Cancelled = false);
 public record MemoryEntry(string SourceText, string TranslatedText, string SourceLanguage, string TargetLanguage,
     string GameId, string GameName, string FilePath, string Key, string Context, string SourceHash, string Provider,
-    DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+    DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Category = "Possible", string TranslationModel = "", string TranslationModelVersion = "", string GlossaryVersion = "", DateTimeOffset? LastUsedAt = null, bool IsManual = false);
 public record FileChange(string RelativePath, string ExpectedHash, byte[] Content);
 public record BackupEntry(string RelativePath, string OriginalHash, string AppliedHash, string ObjectName, DateTimeOffset CreatedAt);
 public class AppSettings
 {
     public string Language { get; set; } = "ru";
-    public string TranslationProvider { get; set; } = "Mock";
+    public string TranslationProvider { get; set; } = "Offline";
+    public OfflineSettings Offline { get; set; } = new();
     public string TargetLanguage { get; set; } = "ru";
     public bool CheckUpdatesOnStartup { get; set; } = true;
     public string GitHubRepository { get; set; } = "koteiik/GameLocalizer";

@@ -84,7 +84,7 @@ public sealed class ScanRegressionTests : IDisposable
         var search = await repository.QueryAsync("scan", new(Search: "number 100004"), 0, default);
         Assert.Equal(1, search.Matching); var target = Assert.Single(search.Rows);
         await repository.SaveEditsAsync("scan", [new(target.Id, "Привет, путник", false)], default);
-        var translated = await repository.QueryAsync("scan", new(Search: "ПРИВЕТ", Status: "Готово"), 0, default);
+        var translated = await repository.QueryAsync("scan", new(Search: "ПРИВЕТ", Status: "Manual"), 0, default);
         Assert.Equal(target.Id, Assert.Single(translated.Rows).Id); Assert.Equal(100004, translated.Selected);
         Assert.Equal(5, (await repository.QueryAsync("scan", new(File: "dialogue-05.csv"), 0, default)).Matching);
         Assert.Equal(0, (await repository.QueryAsync("scan", new(MinimumConfidence: 1), 0, default)).Matching);

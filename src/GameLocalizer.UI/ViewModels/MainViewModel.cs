@@ -9,6 +9,7 @@ using GameLocalizer.Core.Models;
 using GameLocalizer.Infrastructure.Database;
 using GameLocalizer.Infrastructure.FileSystem;
 using GameLocalizer.Infrastructure.Update;
+using GameLocalizer.Infrastructure.TranslationProviders;
 using GameLocalizer.UI.Commands;
 using GameLocalizer.UI.Views;
 using Microsoft.Extensions.Logging;
@@ -16,7 +17,7 @@ using Microsoft.Win32;
 
 namespace GameLocalizer.UI.ViewModels;
 
-public sealed class MainViewModel : Observable
+public sealed partial class MainViewModel : Observable
 {
     private readonly IGameDiscoveryService discovery;
     private readonly IEngineDetector detector;
@@ -27,6 +28,9 @@ public sealed class MainViewModel : Observable
     private readonly SettingsService settingsService;
     private readonly UpdateService updater;
     private readonly ILogger<MainViewModel> logger;
+    private readonly OfflineSettingsViewModel? offlineSettings;
+    private readonly GlossaryService? glossary;
+    private readonly Dictionary<string, Game> sessionGames = [];
     private readonly SemaphoreSlim editGate = new(1, 1);
     private readonly Dictionary<(string Session, long Id), ScanEdit> edits = [];
     private CancellationTokenSource? cancellation, pageCancellation, editCancellation;
@@ -49,7 +53,7 @@ public sealed class MainViewModel : Observable
     public AppSettings Settings { get; }
     public string WindowTitle => "GameLocalizer " + ApplicationVersion.Label;
     public string VersionDescription => ApplicationVersion.Label + " · Русская локализация игр · Ранний MVP";
-    public string[] Modes { get; } = ["Все", "Не переведено", "Validation Error"];
+    public string[] Modes { get; } = ["Все", .. Enum.GetNames<TranslationStatus>()];
     public string[] Filters { get; } = ["Все", "Выбранные", "Высокая уверенность", "Сомнительные", "Технические"];
     public string Filter { get => filter; set { if (filter == value) return; Set(ref filter, value); FilterChanged(); } }
     public ScanSort[] Sorts { get; } = Enum.GetValues<ScanSort>();
@@ -112,17 +116,19 @@ public sealed class MainViewModel : Observable
 
     public MainViewModel(IGameDiscoveryService discovery, IEngineDetector detector, ResourceScanner scanner,
         ScanResultRepository repository, ScanWorkspaceService workspace, BackupService backup,
-        SettingsService settingsService, UpdateService updater, ILogger<MainViewModel> logger)
+        SettingsService settingsService, UpdateService updater, ILogger<MainViewModel> logger, AppSettings? applicationSettings = null, OfflineSettingsViewModel? offlineSettings = null, GlossaryService? glossary = null)
     {
         this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.repository = repository;
         this.workspace = workspace; this.backup = backup; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
-        Settings = settingsService.Load();
+        Settings = applicationSettings ?? settingsService.Load(); this.offlineSettings = offlineSettings; this.glossary = glossary;
+        if (offlineSettings != null) offlineSettings.PropertyChanged += (_, _) => Changed(nameof(ProviderDescription));
         foreach (var manual in Settings.ManualGames.Where(g => Directory.Exists(g.Path))) Games.Add(manual);
         InitializeCommand = new AsyncCommand(RefreshGamesAsync, () => Idle);
         AddCommand = new RelayCommand(AddFolder, () => Idle);
         AnalyzeCommand = new AsyncCommand(AnalyzeSelectedAsync, () => Idle && HasGame);
         FindCommand = new AsyncCommand(FindSelectedAsync, () => Idle && HasGame);
-        TranslateCommand = new AsyncCommand(TranslateSelectedAsync, () => Idle && session != null && SelectedCount > 0);
+        TranslateCommand = new AsyncCommand(() => StartTranslationInteractiveAsync(false), () => Idle && session != null && SelectedCount > 0);
+        RetranslateCommand = new AsyncCommand(() => StartTranslationInteractiveAsync(true), () => Idle && session != null && SelectedCount > 0);
         ApplyCommand = new AsyncCommand(() => Run(async (op, ct) =>
         {
             if (op.Game == null || op.Session == null) return;
@@ -142,7 +148,10 @@ public sealed class MainViewModel : Observable
         CancelCommand = new RelayCommand(Cancel, () => Busy);
         SettingsCommand = new RelayCommand(() =>
         {
-            new SettingsWindow(Settings) { Owner = Application.Current.MainWindow }.ShowDialog();
+            var profile = workspace.Profile; workspace.UnloadModel();
+            new SettingsWindow(Settings, offlineSettings, glossary) { Owner = Application.Current.MainWindow }.ShowDialog();
+            if (profile != workspace.Profile) { session = null; ClearPreview(); Status = "Настройки переводчика/glossary изменены. Нажмите «Найти текст»: ручные переводы сохраняются."; }
+            Changed(nameof(ProviderDescription));
             try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = e.Message; }
         }, () => Idle);
         AboutCommand = new RelayCommand(() => new AboutWindow(Settings.GitHubRepository) { Owner = Application.Current.MainWindow }.ShowDialog());
@@ -161,11 +170,14 @@ public sealed class MainViewModel : Observable
         if (existing != null) { SelectedGame = existing; return; }
         var added = new Game("manual:" + TranslationMemoryService.Hash(path.ToUpperInvariant()), Path.GetFileName(path), path, "Manual");
         Games.Add(added); SelectedGame = added; Settings.ManualGames.Add(added);
-        try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = "Не удалось сохранить список папок"; }
+        Changed(nameof(ProviderDescription));
+            try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = "Не удалось сохранить список папок"; }
     }
     private static bool SamePath(string a, string b) => string.Equals(Path.GetFullPath(a).TrimEnd('\\', '/'), Path.GetFullPath(b).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
     public Task RefreshGamesAsync() => Run(async (op, ct) =>
     {
+        if (offlineSettings != null) await offlineSettings.InitializeAsync();
+        ct.ThrowIfCancellationRequested();
         var found = await discovery.DiscoverAsync(ct);
         ct.ThrowIfCancellationRequested();
         // Preserve existing object references, especially the selected instance, across refreshes.
@@ -193,6 +205,7 @@ public sealed class MainViewModel : Observable
         }
         finally
         {
+            if (source.IsCancellationRequested) workspace.UnloadModel();
             var current = IsCurrent(op);
             operationVersion++; cancellation = null; Busy = false;
             if (current && session != null) { PreviewTask = RefreshPreviewAsync(); await PreviewTask; }
@@ -230,7 +243,7 @@ public sealed class MainViewModel : Observable
         if (op.Game == null) return;
         await Analyze(op, ct);
         ct.ThrowIfCancellationRequested(); if (!IsCurrent(op)) return;
-        var activeSession = Guid.NewGuid().ToString("N"); session = activeSession;
+        var activeSession = Guid.NewGuid().ToString("N"); session = activeSession; sessionGames[activeSession] = op.Game;
         Status = "Сканирование текстовых ресурсов…";
         var previewRequested = false;
         var progress = new Progress<ScanProgress>(p =>
@@ -259,7 +272,7 @@ public sealed class MainViewModel : Observable
         await FlushEditsAsync(); ct.ThrowIfCancellationRequested();
         var progress = new Progress<long>(count => { if (IsCurrent(op)) ProgressText = $"Переведено строк: {count:N0} из выбранных на всех страницах"; });
         await Task.Run(() => workspace.TranslateAsync(op.Game, op.Session, progress, ct), ct);
-        if (IsCurrent(op)) Status = "Mock-перевод готов. [ДЕМО] требует ручного перевода. Проверьте все выбранные страницы.";
+        if (IsCurrent(op)) Status = "Перевод сохранён в памяти и Preview. Проверьте результат перед применением.";
     });
     private ScanQuery Query() => new(Search, FileFilter, Mode, MinimumConfidence, Sort, Descending, Filter);
     private void ClearPreview()
@@ -290,12 +303,12 @@ public sealed class MainViewModel : Observable
             foreach (var item in result.Rows)
             {
                 var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, Key = item.Key, Context = item.Context,
-                    Category = item.Category, Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation };
+                    Category = item.Category, Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation, State = Enum.TryParse<TranslationStatus>(item.Status, out var state) ? state : TranslationStatus.NotTranslated };
                 var lastSelected = row.Selected;
                 row.PropertyChanged += (_, e) =>
                 {
                     if (e.PropertyName is not (nameof(TranslationRow.Selected) or nameof(TranslationRow.Russian))) return;
-                    edits[(activeSession, row.Id)] = new(row.Id, row.Russian, row.Selected);
+                    edits[(activeSession, row.Id)] = new(row.Id, row.Russian, row.Selected, Enum.Parse<TranslationStatus>(row.Status));
                     if (session == activeSession && row.Selected != lastSelected) SelectedCount += row.Selected ? 1 : -1;
                     lastSelected = row.Selected;
                     ScheduleEditSave();
@@ -333,7 +346,11 @@ public sealed class MainViewModel : Observable
         {
             var pending = edits.ToArray();
             foreach (var group in pending.GroupBy(p => p.Key.Session))
-                await repository.SaveEditsAsync(group.Key, group.Select(p => p.Value).ToArray(), CancellationToken.None);
+            {
+                var changes = group.Select(p => p.Value).ToArray();
+                if (sessionGames.TryGetValue(group.Key, out var owner)) await workspace.SaveManualEditsAsync(owner, group.Key, changes, CancellationToken.None);
+                await repository.SaveEditsAsync(group.Key, changes, CancellationToken.None);
+            }
             foreach (var item in pending) if (edits.TryGetValue(item.Key, out var current) && current == item.Value) edits.Remove(item.Key);
         }
         finally { editGate.Release(); }
@@ -341,7 +358,7 @@ public sealed class MainViewModel : Observable
     public async Task ShutdownAsync()
     {
         pageCancellation?.Cancel(); editCancellation?.Cancel();
-        await PreviewTask; await EditSaveTask; await FlushEditsAsync();
+        await PreviewTask; await EditSaveTask; await FlushEditsAsync(); workspace.UnloadModel();
     }
     internal static void Open(string url)
     {

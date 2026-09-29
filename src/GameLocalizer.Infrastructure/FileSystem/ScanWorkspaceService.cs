@@ -6,8 +6,8 @@ using GameLocalizer.Infrastructure.TranslationProviders;
 
 namespace GameLocalizer.Infrastructure.FileSystem;
 
-public sealed class ScanWorkspaceService(ScanPipeline pipeline, ScanResultRepository repository,
-    TranslationService translator, BackupService backup, IEnumerable<ILocalizationAdapter> adapters)
+public sealed partial class ScanWorkspaceService(ScanPipeline pipeline, ScanResultRepository repository,
+    TranslationService translator, BackupService backup, IEnumerable<ILocalizationAdapter> adapters, TranslationJobStore? jobs = null)
 {
     public async Task<ScanProgress> ScanAsync(Game game, string session, IProgress<ScanProgress>? progress, CancellationToken ct)
     {
@@ -20,25 +20,8 @@ public sealed class ScanWorkspaceService(ScanPipeline pipeline, ScanResultReposi
             if (clock.ElapsedMilliseconds >= 100) { progress?.Report(latest); clock.Restart(); }
         }
         progress?.Report(latest);
+        await RestoreMemoryAsync(game, session, ct);
         return latest;
-    }
-    public async Task<long> TranslateAsync(Game game, string session, IProgress<long>? progress, CancellationToken ct)
-    {
-        long afterId = 0, count = 0;
-        while (true)
-        {
-            var batch = await repository.ReadSelectedAsync(session, afterId, true, ct);
-            if (batch.Count == 0) break;
-            foreach (var group in batch.GroupBy(r => r.FilePath))
-            {
-                ct.ThrowIfCancellationRequested();
-                var translated = await translator.TranslateAsync(game, group.Key, group.Select(r => new TranslationItem(r.Id.ToString(), r.Original, r.Context)).ToArray(), ct);
-                await repository.SaveEditsAsync(session, group.Select(r => new ScanEdit(r.Id, translated[r.Id.ToString()], true)).ToArray(), ct);
-                count += group.Count(); progress?.Report(count);
-            }
-            afterId = batch[^1].Id;
-        }
-        return count;
     }
     public async Task<int> ApplyAsync(Game game, string session, CancellationToken ct)
     {

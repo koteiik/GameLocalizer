@@ -6,6 +6,21 @@
 ### Changed
 ### Fixed
 
+## [0.2.0]
+
+### Added
+- Real offline EN→RU OPUS-MT INT8 translation and separate SHA256-verified model management.
+- Isolated ONNX Runtime worker, DirectML attempt, CPU fallback, adaptive batches and automatic unload.
+- Persistent model/version/glossary-aware translation memory with protected manual overrides.
+- Preflight counts, test 20 rows, resumable job metadata, explicit retranslation and cancellation.
+- Whole-string CSV/JSON glossary and Names category, protected placeholders and markup.
+- Hardware/device/batch/cache settings and application-plus-worker RAM reporting.
+- Offline regression tests and an opt-in real-model smoke tool; CI never downloads weights.
+
+### Fixed
+- Native GPU runtime crashes cannot terminate WPF.
+- Model download progress uses a one-way WPF binding.
+
 ## [0.1.2]
 
 ### Fixed

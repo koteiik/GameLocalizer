@@ -1,0 +1,38 @@
+{
+  "Id": "opus-mt-en-ru-int8",
+  "Files": [
+    {
+      "Sha256": "97f28d8295d231b7da721ded06fa8c034787df2122cd8f85b904abdc4d15bd53",
+      "Url": "https://huggingface.co/Xenova/opus-mt-en-ru/resolve/e050376e960175e8ddc5cff85025dc8436cddd68/onnx/encoder_model_quantized.onnx",
+      "Size": 51628446,
+      "Name": "onnx/encoder_model_quantized.onnx"
+    },
+    {
+      "Sha256": "7e4e602c31130176b086cd4bf31d6d08d44a6a367617e910870e0ea3e5408574",
+      "Url": "https://huggingface.co/Xenova/opus-mt-en-ru/resolve/e050376e960175e8ddc5cff85025dc8436cddd68/onnx/decoder_model_quantized.onnx",
+      "Size": 58560874,
+      "Name": "onnx/decoder_model_quantized.onnx"
+    },
+    {
+      "Sha256": "16bebef1389a0b8ab452772c4e35b9e605e5713f8ac7baa71ca701394eaa086d",
+      "Url": "https://huggingface.co/Xenova/opus-mt-en-ru/resolve/e050376e960175e8ddc5cff85025dc8436cddd68/source.spm",
+      "Size": 802781,
+      "Name": "source.spm"
+    },
+    {
+      "Sha256": "5cf0d95d930d8d3e783c9e2f46a72f08b43a18060dab4ddefbcb66a733efedcb",
+      "Url": "https://huggingface.co/Xenova/opus-mt-en-ru/resolve/e050376e960175e8ddc5cff85025dc8436cddd68/vocab.json",
+      "Size": 2726796,
+      "Name": "vocab.json"
+    },
+    {
+      "Sha256": "db16bf0ea7bac239273214c3b9ab44577884227371a9a25e0191b7baf8d6f167",
+      "Url": "https://huggingface.co/Xenova/opus-mt-en-ru/resolve/e050376e960175e8ddc5cff85025dc8436cddd68/config.json",
+      "Size": 1376,
+      "Name": "config.json"
+    }
+  ],
+  "License": "Apache-2.0",
+  "Version": "e050376e960175e8ddc5cff85025dc8436cddd68",
+  "Name": "OPUS-MT EN → RU (Marian, INT8)"
+}

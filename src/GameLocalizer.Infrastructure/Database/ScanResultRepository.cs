@@ -24,7 +24,7 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
                 CREATE TABLE IF NOT EXISTS ScanRows (
                   Id INTEGER PRIMARY KEY, Session TEXT NOT NULL, GameId TEXT NOT NULL, FilePath TEXT NOT NULL,
                   EntryKey TEXT NOT NULL, Original TEXT NOT NULL, Translation TEXT NOT NULL DEFAULT '', Context TEXT NOT NULL,
-                  Confidence REAL NOT NULL, Selected INTEGER NOT NULL, Status TEXT NOT NULL DEFAULT 'Не переведено', Category TEXT NOT NULL);
+                  Confidence REAL NOT NULL, Selected INTEGER NOT NULL, Status TEXT NOT NULL DEFAULT 'NotTranslated', Category TEXT NOT NULL);
                 CREATE INDEX IF NOT EXISTS ScanSessionId ON ScanRows(Session, Id);
                 CREATE INDEX IF NOT EXISTS ScanSelected ON ScanRows(Session, Selected, Status, Id);
                 CREATE INDEX IF NOT EXISTS ScanFile ON ScanRows(Session, FilePath);
@@ -106,7 +106,8 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
         {
             ct.ThrowIfCancellationRequested(); read.Parameters["$id"].Value = edit.Id;
             if (read.ExecuteScalar() is not string original) continue;
-            var status = string.IsNullOrWhiteSpace(edit.Translation) ? "Не переведено" : new TranslationValidator().Validate(original, edit.Translation, out _) ? "Готово" : "Validation Error";
+            var status = edit.Status is TranslationStatus.Queued or TranslationStatus.Translating or TranslationStatus.Cancelled or TranslationStatus.Failed or TranslationStatus.ValidationError ? edit.Status.Value.ToString() :
+                string.IsNullOrWhiteSpace(edit.Translation) ? "NotTranslated" : new TranslationValidator().Validate(original, edit.Translation, out _) ? (edit.Status ?? TranslationStatus.Manual).ToString() : "ValidationError";
             write.Parameters["$translation"].Value = edit.Translation; write.Parameters["$selected"].Value = edit.Selected ? 1 : 0; write.Parameters["$status"].Value = status; write.Parameters["$id"].Value = edit.Id;
             write.ExecuteNonQuery();
         }
@@ -116,13 +117,13 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
     public Task<IReadOnlyList<ScanRow>> ReadSelectedAsync(string session, long afterId, bool onlyUntranslated, CancellationToken ct) => Run<IReadOnlyList<ScanRow>>(db =>
     {
         using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$id", afterId);
-        cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Selected=1 AND Id>$id {(onlyUntranslated ? "AND Status='Не переведено'" : "")} ORDER BY Id LIMIT 1000";
+        cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Selected=1 AND Id>$id {(onlyUntranslated ? "AND Status NOT IN ('Translated','FromMemory','Manual')" : "")} ORDER BY Id LIMIT 1000";
         using var r = cmd.ExecuteReader(); var result = new List<ScanRow>(); while (r.Read()) { ct.ThrowIfCancellationRequested(); result.Add(Read(r)); } return result;
     }, ct);
     public Task<IReadOnlyList<ScannedFile>> SelectedFilesAsync(string session, CancellationToken ct) => Run<IReadOnlyList<ScannedFile>>(db =>
     {
         using var cmd = db.CreateCommand(); Bind(cmd, session);
-        cmd.CommandText = "SELECT COUNT(*) FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Selected=1 AND Status<>'Готово'";
+        cmd.CommandText = "SELECT COUNT(*) FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Selected=1 AND Status NOT IN ('Translated','FromMemory','Manual')";
         if ((long)cmd.ExecuteScalar()! != 0) throw new InvalidDataException("Выбранные строки содержат пустой перевод или Validation Error (включая другие страницы).");
         cmd.CommandText = "SELECT f.FilePath,f.SourceHash FROM ScanFiles f WHERE f.Session=$session AND EXISTS(SELECT 1 FROM ScanRows r WHERE r.Session=f.Session AND r.FilePath=f.FilePath AND r.Selected=1)";
         using var r = cmd.ExecuteReader(); var result = new List<ScannedFile>(); while (r.Read()) { ct.ThrowIfCancellationRequested(); result.Add(new(r.GetString(0), r.GetString(1))); } return result;
@@ -132,6 +133,27 @@ public sealed class ScanResultRepository(string databasePath) : IDisposable
         using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$file", file);
         cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND FilePath=$file AND Category<>'Technical' AND Selected=1 ORDER BY Id";
         using var r = cmd.ExecuteReader(); var result = new List<ScanRow>(); while (r.Read()) { ct.ThrowIfCancellationRequested(); result.Add(Read(r)); } return result;
+    }, ct);
+    public Task<IReadOnlyList<ScanRow>> ReadRowsAsync(string session, long afterId, CancellationToken ct) => Run<IReadOnlyList<ScanRow>>(db =>
+    {
+        using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$id", afterId);
+        cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Id>$id ORDER BY Id LIMIT 1000";
+        using var r = cmd.ExecuteReader(); var rows = new List<ScanRow>(); while (r.Read()) { ct.ThrowIfCancellationRequested(); rows.Add(Read(r)); } return rows;
+    }, ct);
+    public Task SetPendingStatusAsync(string session, TranslationStatus status, CancellationToken ct) => Run(db =>
+    {
+        using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$status", status.ToString());
+        cmd.CommandText = "UPDATE ScanRows SET Status=$status WHERE Session=$session AND Selected=1 AND Category<>'Technical' AND Status NOT IN ('Translated','FromMemory','Manual','ValidationError','Failed')";
+        return cmd.ExecuteNonQuery();
+    }, ct);
+    public Task<IReadOnlyList<ScanRow>> RowsByIdAsync(string session, IReadOnlySet<long> ids, CancellationToken ct) => Run<IReadOnlyList<ScanRow>>(db =>
+    {
+        if (ids.Count == 0) return [];
+        if (ids.Count > 1000) throw new ArgumentOutOfRangeException(nameof(ids));
+        using var cmd = db.CreateCommand(); Bind(cmd, session);
+        var parameters = ids.Select((id, index) => { var name = "$id" + index; cmd.Parameters.AddWithValue(name, id); return name; });
+        cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Category<>'Technical' AND Id IN ({string.Join(",", parameters)})";
+        using var reader = cmd.ExecuteReader(); var rows = new List<ScanRow>(); while (reader.Read()) { ct.ThrowIfCancellationRequested(); rows.Add(Read(reader)); } return rows;
     }, ct);
     public void Dispose()
     {

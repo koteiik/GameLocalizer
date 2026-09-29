@@ -26,7 +26,9 @@ jobs:
         shell: pwsh
         run: |
           if (!(Test-Path artifacts/publish/GameLocalizer.exe)) { throw 'Executable missing' }
-          Copy-Item README.md,LICENSE artifacts/publish/
+          if (!(Test-Path artifacts/publish/GameLocalizer.ModelHost.exe)) { throw 'Model host missing' }
+          if (Get-ChildItem artifacts/publish -Recurse -Include *.onnx,*.spm) { throw 'Model weights must not be packaged' }
+          Copy-Item README.md,LICENSE,THIRD_PARTY_NOTICES.md artifacts/publish/
           Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/GameLocalizer-win-x64.zip
       - name: Create release
         shell: pwsh

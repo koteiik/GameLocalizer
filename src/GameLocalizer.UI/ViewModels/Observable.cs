@@ -22,6 +22,7 @@ public sealed class TranslationRow : Observable
     public bool CanSelect => Category != TextCategory.Technical;
     private bool selected;
     public bool Selected { get => selected; set => Set(ref selected, value && CanSelect); }
-    public string Russian { get => russian; set { Set(ref russian, value); Changed(nameof(Status)); } }
-    public string Status => string.IsNullOrWhiteSpace(Russian) ? "Не переведено" : new TranslationValidator().Validate(Original, Russian, out _) ? "Готово" : "Validation Error";
+    public TranslationStatus State { get; set; } = TranslationStatus.NotTranslated;
+    public string Russian { get => russian; set { State = string.IsNullOrWhiteSpace(value) ? TranslationStatus.NotTranslated : TranslationStatus.Manual; Set(ref russian, value); Changed(nameof(Status)); } }
+    public string Status => !string.IsNullOrWhiteSpace(Russian) && !new TranslationValidator().Validate(Original, Russian, out _) ? "ValidationError" : State.ToString();
 }

@@ -20,3 +20,8 @@ settings.json
 games/
 !samples/SampleGames/**
 **/TestResults/
+*.onnx
+*.onnx.data
+*.spm
+*.safetensors
+*.partial-*

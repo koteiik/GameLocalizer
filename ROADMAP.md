@@ -9,8 +9,9 @@ This roadmap is guidance, not a promise.
 - Translation Memory, backup and restore
 
 ## v0.2
-- Epic Games and GOG
-- Improved detection and additional formats
+- Offline translation, model management, CPU/GPU fallback (0.2.0)
+- Persistent memory, manual overrides, resume and safe glossary (0.2.0)
+- Follow-up: Epic Games, GOG, improved detection and additional formats
 
 ## v0.3
 - Unity-specific localization

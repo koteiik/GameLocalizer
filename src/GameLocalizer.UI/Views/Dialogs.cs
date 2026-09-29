@@ -6,23 +6,6 @@ using GameLocalizer.Infrastructure.Update;
 using GameLocalizer.UI.ViewModels;
 namespace GameLocalizer.UI.Views;
 
-public sealed class SettingsWindow : Window
-{
-    public SettingsWindow(AppSettings settings)
-    {
-        Style = (Style)FindResource(typeof(Window));
-        Title = "Настройки → Переводчик"; Width = 510; Height = 390; WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var panel = new StackPanel { Margin = new Thickness(24) }; Content = panel;
-        panel.Children.Add(new TextBlock { Text = "Переводчик: Mock · Язык: Russian (ru)", FontSize = 18 });
-        panel.Children.Add(new TextBlock { Text = "Mock — демонстрационный словарь, не нейросеть.\nНеизвестные строки получают префикс [ДЕМО].\nOpenAI и DeepL предусмотрены интерфейсом провайдера.\nAPI-ключи в v0.1.0 не запрашиваются.", Margin = new Thickness(0, 15, 0, 15), TextWrapping = TextWrapping.Wrap });
-        var check = new CheckBox { Content = "Проверять обновления при запуске", IsChecked = settings.CheckUpdatesOnStartup };
-        check.Click += (_, _) => settings.CheckUpdatesOnStartup = check.IsChecked == true; panel.Children.Add(check);
-        panel.Children.Add(new TextBlock { Text = "GitHub repository (owner/GameLocalizer):" });
-        var repository = new TextBox { Text = settings.GitHubRepository }; panel.Children.Add(repository);
-        var save = new Button { Content = "Сохранить" }; panel.Children.Add(save);
-        save.Click += (_, _) => { if (repository.Text.Length > 0 && !UpdateService.ValidRepository(repository.Text)) { MessageBox.Show("Введите owner/GameLocalizer"); return; } settings.GitHubRepository = repository.Text; Close(); };
-    }
-}
 public sealed class AboutWindow : Window
 {
     public AboutWindow(string repository)

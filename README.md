@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.1.2 filters Unity runtime/documentation and uses conservative selection in the conservative text-resource MVP. It does not automatically translate arbitrary games. The bundled Mock provider is a demonstration dictionary, not an AI translator.
+**Project is in early development.** Version 0.2.0 adds real offline English → Russian translation with a separately downloaded OPUS-MT INT8 model, persistent translation memory and resumable jobs. Review every translation before applying it.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -25,7 +25,7 @@ Windows 10/11 x64. Once a release is published: **Releases → Latest → GameLo
 1. Select a discovered Steam game or choose **Добавить игру вручную**.
 2. **Анализировать** identifies the engine and lists resources, including formats needing future adapters.
 3. **Найти текст** extracts likely player-visible strings. No files are modified.
-4. **Перевести (Mock)** translates selected empty rows. Edit the Russian column; double-click a cell to edit it.
+4. In **Настройки**, select **Offline** and download the model once (108.5 MiB). Click **Перевести**, review the preflight counts and choose **Тест 20 строк** or start the job. Double-click a Russian cell to edit it; manual edits persist and override machine translations.
 5. Review selection, placeholders and errors. Use **← Назад / Далее →** to change pages. Search, filters and the sorting selector operate on the entire database. **Выбрать страницу / Снять страницу** change only the loaded page; other pages keep their selection. Category identifies the source. Automatic selection requires confidence ≥85%; 60–84% is visible but unselected. **Все** hides technical rows and confidence <60%; **Сомнительные** shows nontechnical rows below 85%, and **Технические** shows rejected values found inside otherwise eligible resources. These two audit filters ignore the confidence slider. Technical rows cannot be selected. Status, search and file filters still apply.
 6. Close the game, then **Применить**. Translation and application process all selected rows across all pages, including rows hidden by filters. Every selected translation must be valid. Manual edits are flushed to the scan cache before paging or applying.
 7. **Восстановить** returns every backed-up file to its original bytes. Keep the backup folder.
@@ -54,9 +54,13 @@ Unity, Unreal, Godot, Ren'Py and RPG Maker are recognized heuristically; unsuppo
 UTF-8 (with/without BOM), UTF-16 and UTF-32 with BOM are supported. Invalid UTF-8/unknown legacy encodings are skipped rather than guessed. XML serialization may normalize its declaration/formatting while preserving parsed structure. XML attributes containing localizable text require a future schema-aware adapter. Binary archives and executables are never translated.
 
 ## Translation Providers
-Mock is implemented and offline. A small dictionary returns Russian text; unknown strings get `[ДЕМО]` followed by the original text. These are **not real translations** and require editing. `ITranslationProvider` accepts ID-preserving contextual batches and cannot write game files. OpenAI/DeepL can be implemented independently; they are not offered as working providers. No API keys are requested or stored in v0.1.
+**Offline** uses the specialized OPUS-MT EN→RU Marian model through ONNX Runtime in a private local worker process. Auto/GPU attempts DirectML and falls back to CPU. No CUDA, API key, account or inference server is needed. Only initial model download and optional update checks need the Internet. Model files are SHA256 checked and excluded from the application ZIP. Existing installations retain their provider setting: switch from Mock to Offline after upgrading.
 
-Translation memory lives in `%LOCALAPPDATA%/GameLocalizer/memory.db` and scopes exact matches by game, source/target language, context and provider. It stores extracted text, not whole game files. Manual edits are applied directly; v0.1 does not add them to provider memory.
+Translation memory in `%LOCALAPPDATA%/GameLocalizer/memory.db` persists across restarts and scopes machine matches by game, languages, context, provider, model/version, glossary version and category. Manual edits always win, including explicit retranslation. Unchanged cached text never loads the model. Cancellation saves completed batches; scan again and resume remaining rows. The model unloads after a job by default. A whole-string CSV/JSON glossary includes a Names category; it does not replace words inside sentences.
+
+Mock remains a demonstration dictionary (`[ДЕМО]` for unknown phrases), not a real translator. No OCR, overlay, game monitoring or background retranslation is included. See [Offline Translation](docs/OFFLINE-TRANSLATION.md) for setup, model sources, lifecycle, smoke checks and limitations. INT8 greedy output needs review; GPU compatibility is driver-dependent and CPU fallback was used on the tested machine.
+
+**Перевод выполняется один раз и сохраняется. Повторный запуск игры не запускает модель и не расходует ресурсы на повторный перевод.**
 
 ## Safety
 - No DRM/anti-cheat bypass, process injection, network interception, executable patching or protected archive modification.

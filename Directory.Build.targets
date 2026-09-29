@@ -1,0 +1,12 @@
+<Project>
+  <Target Name="CopyLocalModelHost" AfterTargets="Build" Condition="'$(MSBuildProjectName)' == 'GameLocalizer.UI' Or '$(MSBuildProjectName)' == 'GameLocalizer.Smoke'">
+    <ItemGroup>
+      <ModelHostFiles Include="$(MSBuildThisFileDirectory)src/GameLocalizer.ModelHost/bin/$(Configuration)/net8.0-windows/$(RuntimeIdentifier)/GameLocalizer.ModelHost.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ModelHostFiles)" DestinationFolder="$(TargetDir)" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishLocalModelHost" AfterTargets="Publish" Condition="'$(MSBuildProjectName)' == 'GameLocalizer.UI'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)src/GameLocalizer.ModelHost/GameLocalizer.ModelHost.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir)" />
+    <Error Condition="!Exists('$(PublishDir)GameLocalizer.ModelHost.exe')" Text="Local model host missing from publish output" />
+  </Target>
+</Project>
