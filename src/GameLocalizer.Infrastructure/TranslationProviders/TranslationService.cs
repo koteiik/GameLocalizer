@@ -38,7 +38,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
     private Task Save(Game game, string file, TranslationItem item, string translated, bool manual, CancellationToken ct)
     {
         var key = Key(game, item); var now = DateTimeOffset.UtcNow;
-        return memory.SaveAsync(new(item.Text, translated, key.SourceLanguage, key.TargetLanguage, game.Id, game.Name, file, item.Key.Length == 0 ? item.Id : item.Key,
+        return memory.SaveAsync(new(item.Text, translated, key.SourceLanguage, key.TargetLanguage, game.Id, game.Name, file, LocalizationEntryId.DisplayKey(item.Key.Length == 0 ? item.Id : item.Key),
             key.Context, TranslationMemoryService.Identity(key, manual), provider.Name, now, now, item.Category, key.Model, key.ModelVersion, key.GlossaryVersion, now, manual), ct);
     }
     public async Task<IReadOnlyList<TranslationOutcome>> TranslateDetailedAsync(Game game, string file, IReadOnlyList<TranslationItem> items, bool ignoreMemory, CancellationToken ct)
@@ -64,7 +64,9 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
             ct.ThrowIfCancellationRequested();
             var protector = new PlaceholderProtector(); var maps = batch.ToDictionary(i => i.Id, i => protector.Protect(i.Text));
             TranslationResult response;
-            try { response = await provider.TranslateAsync(new(new(batch.Select(i => i with { Text = maps[i.Id].Text }).ToArray())), ct); }
+            // Provider IDs are opaque batch ordinals. Local keys/locators never cross this boundary.
+            var providerIds = batch.Select((item, index) => (item.Id, WireId: index.ToString(System.Globalization.CultureInfo.InvariantCulture))).ToDictionary(p => p.Id, p => p.WireId);
+            try { response = await provider.TranslateAsync(new(new(batch.Select(i => new TranslationItem(providerIds[i.Id], maps[i.Id].Text, i.Context, i.Category)).ToArray())), ct); }
             catch (OperationCanceledException) { throw; }
             catch (Exception e)
             {
@@ -75,7 +77,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
             {
                 try
                 {
-                    if (!response.Translations.TryGetValue(item.Id, out var translated))
+                    if (!response.Translations.TryGetValue(providerIds[item.Id], out var translated))
                     {
                         if (response.Cancelled) { Complete(item, "", TranslationStatus.Cancelled); continue; }
                         throw new InvalidDataException("Provider omitted ID");

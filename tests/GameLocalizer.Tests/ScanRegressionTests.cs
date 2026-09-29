@@ -14,7 +14,7 @@ namespace GameLocalizer.Tests;
 public sealed class ScanRegressionTests : IDisposable
 {
     private readonly string root = Path.Combine(Path.GetTempPath(), "GameLocalizerScanTests", Guid.NewGuid().ToString("N"));
-    internal static ILocalizationAdapter[] Adapters() => [new JsonLocalizationAdapter(), new IniLocalizationAdapter(), new PlainTextLocalizationAdapter(), new CsvLocalizationAdapter(), new XmlLocalizationAdapter(), new PoLocalizationAdapter()];
+    internal static ILocalizationAdapter[] Adapters() => [new BepInExLocalizationAdapter(), new JsonLocalizationAdapter(), new IniLocalizationAdapter(), new PlainTextLocalizationAdapter(), new CsvLocalizationAdapter(), new XmlLocalizationAdapter(), new PoLocalizationAdapter()];
     public ScanRegressionTests() => Directory.CreateDirectory(root);
     public void Dispose() { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     private string Write(string name, string text) { var path = Path.Combine(root, name); Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, text, new UTF8Encoding(false)); return path; }

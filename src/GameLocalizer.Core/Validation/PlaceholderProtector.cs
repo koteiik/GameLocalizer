@@ -3,7 +3,7 @@ namespace GameLocalizer.Core.Validation;
 
 public sealed class PlaceholderProtector
 {
-    private static readonly Regex Tokens = new(@"\{\{[^{}]+\}\}|\{[^{}]+\}|%(?:\d+\$)?[-+0 #]*\d*(?:\.\d+)?[sdifouxXeEgGc%]|\\[nrt]|[\n\r\t]|</?[^>\r\n]+>|\[/?[A-Za-z][^\]\r\n]*\]", RegexOptions.Compiled);
+    private static readonly Regex Tokens = new(@"\{\{[^{}]+\}\}|\{[^{}]+\}|%3D|%(?:\d+\$)?[-+0 #]*\d*(?:\.\d+)?[sdifouxXeEgGc%]|\\(?:[\\=nrt/]|u[0-9a-fA-F]{4})|[\n\r\t]|</?[^>\r\n]+>|\[/?[A-Za-z][^\]\r\n]*\]", RegexOptions.Compiled);
     public IReadOnlyList<string> Extract(string text) => Tokens.Matches(text).Select(m => m.Value).ToArray();
     public (string Text, IReadOnlyDictionary<string, string> Tokens) Protect(string text)
     {

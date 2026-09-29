@@ -25,7 +25,7 @@ public sealed class TranslationTestWindow : Window
     {
         Style = (Style)FindResource(typeof(Window)); Title = "Тест 20 строк · игровые файлы не изменены"; Width = 1000; Height = 560; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var table = new DataGrid { ItemsSource = rows, IsReadOnly = true, AutoGenerateColumns = false, Margin = new Thickness(20), CanUserAddRows = false };
-        foreach (var column in new[] { ("Original", "Original"), ("Russian", "Translation"), ("Category", "Category"), ("Status", "Status") })
+        foreach (var column in new[] { ("Key", "DisplayKey"), ("Original", "Original"), ("Russian", "Translation"), ("Category", "Category"), ("Status", "Status") })
             table.Columns.Add(new DataGridTextColumn { Header = column.Item1, Binding = new System.Windows.Data.Binding(column.Item2), Width = new DataGridLength(column.Item1 is "Original" or "Russian" ? 3 : 1, DataGridLengthUnitType.Star) });
         Content = table;
     }

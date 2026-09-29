@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.2.2 adds in-app GitHub updates with SHA256 verification, a separate updater, installation backup and startup rollback. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
+**Project is in early development.** Version 0.2.3 fixes BepInEx/XUnity key=value localization: only values reach the model; keys, formatting and comments remain unchanged. In-app GitHub updates retain SHA256 verification, installation backup and startup rollback. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -13,7 +13,7 @@ Open-source Windows application for creating Russian localizations for PC games.
 - Streaming batches and a temporary SQLite scan cache; no 50,000-row aggregate limit.
 - Unity runtime directories, assembly metadata, API documentation XML, logs and engine diagnostics excluded before translation.
 - Source categories, conservative automatic selection (confidence ≥85%), doubtful/technical audit filters and global counters.
-- Structured JSON/XML/CSV/TSV/INI/singular PO/plain-text adapters.
+- Structured JSON/XML/CSV/TSV/INI/singular PO/plain-text and BepInEx/XUnity key-value adapters.
 - Placeholder protection and validation before applying translations.
 - Contextual batches, SQLite translation memory, immutable original backups, SHA256 validation and restore.
 - Russian WPF interface, local logs, optional GitHub release checks.
@@ -50,7 +50,8 @@ Unity, Unreal, Godot, Ren'Py and RPG Maker are recognized heuristically; unsuppo
 | CSV / TSV | Header row and first ID column preserved; remaining cells, including quoted multiline fields |
 | INI / .lang / .locale / .loc / .strings | Only INI-style `key=value` syntax; sections/comments retained |
 | PO | Singular msgid/msgstr and multiline strings; headers/context metadata untouched; plural entries not translated |
-| TXT | Nonempty lines; original line endings preserved |
+| BepInEx / XUnity TXT | Localization key=value pairs; only values translated, duplicate keys and formatting preserved. [Format details](docs/XUNITY-LOCALIZATION.md) |
+| Other TXT | Nonempty lines; original line endings preserved |
 | YAML / YML / RPY | Detected only; no write adapter in v0.1 |
 
 UTF-8 (with/without BOM), UTF-16 and UTF-32 with BOM are supported. Invalid UTF-8/unknown legacy encodings are skipped rather than guessed. XML serialization may normalize its declaration/formatting while preserving parsed structure. XML attributes containing localizable text require a future schema-aware adapter. Binary archives and executables are never translated.
@@ -88,7 +89,7 @@ dotnet restore GameLocalizer.sln
 dotnet build GameLocalizer.sln -c Release --no-restore
 dotnet test GameLocalizer.sln -c Release --no-build
 dotnet publish src/GameLocalizer.UI -c Release -r win-x64 --self-contained true -o artifacts/publish
-Compress-Archive -Path artifacts/publish/* -DestinationPath artifacts/GameLocalizer-win-x64.zip -Force
+./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version 0.2.3 -ZipPath artifacts/GameLocalizer-win-x64.zip
 ```
 
 GitHub Actions builds/tests on pushes and pull requests. Pushing a `v*` tag also publishes a self-contained win-x64 ZIP and creates a GitHub Release only after tests pass.

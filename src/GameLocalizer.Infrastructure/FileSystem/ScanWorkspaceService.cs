@@ -1,5 +1,6 @@
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Models;
+using GameLocalizer.Core.Localization;
 using GameLocalizer.Core.Validation;
 using GameLocalizer.Infrastructure.Database;
 using GameLocalizer.Infrastructure.TranslationProviders;
@@ -41,7 +42,7 @@ public sealed partial class ScanWorkspaceService(ScanPipeline pipeline, ScanResu
                 var rows = await repository.FileRowsAsync(session, file.FilePath, ct);
                 foreach (var row in rows)
                     if (!new TranslationValidator().Validate(row.Original, row.Translation, out var error)) throw new InvalidDataException(error);
-                var adapter = adapters.First(a => a.CanHandle(file.FilePath)); var translations = rows.ToDictionary(r => r.Key, r => r.Translation);
+                var adapter = LocalizationAdapterSelector.Select(adapters, path, snapshot.Text); var translations = rows.ToDictionary(r => r.Key, r => r.Translation);
                 var modified = adapter.ApplyTranslations(snapshot.Text, translations);
                 if (!adapter.Validate(snapshot.Text, modified, translations)) throw new InvalidDataException("Structure validation failed: " + file.FilePath);
                 var bytes = snapshot.Encode(modified);

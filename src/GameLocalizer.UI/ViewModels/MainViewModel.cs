@@ -302,7 +302,7 @@ public sealed partial class MainViewModel : Observable
             Rows.Clear();
             foreach (var item in result.Rows)
             {
-                var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, Key = item.Key, Context = item.Context,
+                var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, Key = item.DisplayKey, Context = item.Context,
                     Category = item.Category, Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation, State = Enum.TryParse<TranslationStatus>(item.Status, out var state) ? state : TranslationStatus.NotTranslated };
                 var lastSelected = row.Selected;
                 row.PropertyChanged += (_, e) =>

@@ -1,0 +1,11 @@
+// Artificial key-value localization fixture, not a commercial game asset.
+# This comment is preserved.
+; This comment is also preserved.
+ありがとう = Thank you.
+NoName=No Name
+FK関節=FK Joint
+BGM=Game BGM
+ありがとう=Thank you.
+Formula=A=B+C
+escaped\=key=Hello {player}\nWelcome home.
+r:^technical=Do not translate this regex rule.

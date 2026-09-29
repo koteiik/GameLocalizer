@@ -201,7 +201,7 @@ public sealed class UpdateTests : IDisposable
     public async Task UpdateWhileTranslatingDisabledInViewModel()
     {
         var translating = true; var saves = 0;
-        var client = Client((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Json("v0.2.3")) }));
+        var client = Client((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(Json("v99.0.0")) }));
         var vm = new UpdateViewModel(client, () => translating, () => { saves++; return Task.CompletedTask; });
         await vm.CheckAsync(default); Assert.False(vm.CanUpdate); Assert.False(vm.UpdateCommand.CanExecute(null));
         await vm.InstallAsync(); Assert.Equal(0, saves); Assert.Contains("Завершите", vm.BlockReason);

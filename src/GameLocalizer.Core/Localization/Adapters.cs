@@ -14,7 +14,7 @@ public abstract class SpanAdapter : ILocalizationAdapter
     public abstract string Name { get; }
     public abstract bool CanHandle(string path);
     protected abstract IReadOnlyList<TextSpan> Parse(string text);
-    public IReadOnlyList<TextEntry> Extract(string text) => Parse(text).Select(s => new TextEntry(s.Key, s.Value)).ToArray();
+    public virtual IReadOnlyList<TextEntry> Extract(string text) => Parse(text).Select(s => new TextEntry(s.Key, s.Value)).ToArray();
     public string ApplyTranslations(string text, IReadOnlyDictionary<string, string> translations)
     {
         var spans = Parse(text);
@@ -36,7 +36,7 @@ public abstract class SpanAdapter : ILocalizationAdapter
         {
             var a = Extract(original); var b = Extract(modified);
             return ApplyTranslations(original, translations) == modified && a.Count == b.Count && a.Zip(b).All(p =>
-                p.First.Key == p.Second.Key && p.Second.Text == translations.GetValueOrDefault(p.First.Key, p.First.Text));
+                p.First.Id == p.Second.Id && p.First.Key == p.Second.Key && p.Second.Text == translations.GetValueOrDefault(p.First.Id, p.First.Text));
         }
         catch (Exception e) when (e is FormatException or JsonException or InvalidDataException or XmlException) { return false; }
     }

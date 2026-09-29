@@ -23,6 +23,12 @@ using var runtime = new IsolatedTranslationRuntime(hostOption >= 0 ? Path.GetFul
 using var provider = new LocalOfflineTranslationProvider(offlineModels, runtime, new HardwareDetectionService(), new OfflineSettings { Device = args.Contains("--gpu") ? TranslationDevice.GPU : TranslationDevice.CPU, BatchSize = 4 });
 var memoryPath = Path.Combine(root, "memory.db");
 var service = new TranslationService(provider, new TranslationMemoryService(memoryPath), NullLogger<TranslationService>.Instance);
+if (args.Contains("--key-value"))
+{
+    await KeyValueSmoke.RunAsync(root, service, runtime);
+    if (blockNetwork.Calls != 0) throw new Exception("Offline network call");
+    return;
+}
 var replay = args.Contains("--replay"); var identityPath = Path.Combine(root, "last-smoke-game.txt");
 var identity = replay ? File.ReadAllText(identityPath) : "offline-smoke-" + Guid.NewGuid().ToString("N");
 if (!replay) File.WriteAllText(identityPath, identity);

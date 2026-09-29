@@ -20,7 +20,21 @@ public sealed class Game(string id, string name, string path, string platform, s
 }
 public enum ResourceKind { LocalizationCandidate, DialogueResource, SubtitleResource, UIResource, PossibleTextResource, TechnicalDocumentation, AssemblyMetadata, EngineRuntime, TechnicalFile, LogFile, Binary, Unknown, ModInfrastructure, ToolConfiguration, QuestResource, ItemResource, StoryResource }
 public record Resource(string Path, string Format, bool Editable, string Detail, ResourceKind Kind = ResourceKind.PossibleTextResource);
-public record TextEntry(string Key, string Text, string Context = "");
+public record TextEntry(string Key, string Text, string Context = "", string? EntryId = null)
+{
+    public string Id => EntryId ?? Key;
+}
+// A local locator, never a provider ID. Including the physical line preserves duplicate keys.
+public static class LocalizationEntryId
+{
+    public static string KeyValue(int line, string key) => $"kv:{line}:{key}";
+    public static string DisplayKey(string id)
+    {
+        if (!id.StartsWith("kv:", StringComparison.Ordinal)) return id;
+        var colon = id.IndexOf(':', 3);
+        return colon > 3 && int.TryParse(id.AsSpan(3, colon - 3), out var line) && line > 0 ? id[(colon + 1)..] : id;
+    }
+}
 public record TranslationItem(string Id, string Text, string Context, string Category = "Possible", string Key = "");
 public record TranslationBatch(IReadOnlyList<TranslationItem> Items);
 public record TranslationRequest(TranslationBatch Batch, string TargetLanguage = "ru", string SourceLanguage = "auto")

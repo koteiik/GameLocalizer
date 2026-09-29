@@ -5,7 +5,10 @@ public record ScanEntry(string FilePath, string Key, string Original, string Con
 public record ScanProgress(long FilesVisited, long Candidates, long Processed, long SkippedFiles, long Selected = 0);
 public record ScanBatch(Resource Resource, string? SourceHash, IReadOnlyList<ScanEntry> Entries, ScanProgress Progress);
 public record ScanRow(long Id, string FilePath, string Key, string Original, string Translation, string Context,
-    double Confidence, bool Selected, string Status, TextCategory Category = TextCategory.Possible);
+    double Confidence, bool Selected, string Status, TextCategory Category = TextCategory.Possible)
+{
+    public string DisplayKey => LocalizationEntryId.DisplayKey(Key);
+}
 public record ScanEdit(long Id, string Translation, bool Selected, TranslationStatus? Status = null);
 public enum ScanSort { Id, Original, Translation, FilePath, Key, Confidence, Status }
 public record ScanQuery(string Search = "", string File = "", string Status = "Все", double MinimumConfidence = 0,

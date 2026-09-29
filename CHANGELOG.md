@@ -6,6 +6,15 @@
 ### Changed
 ### Fixed
 
+## [0.2.3]
+
+### Fixed
+- Parse BepInEx/XUnity TXT localization at the first unescaped equals and translate only the value; immutable keys never reach translation providers, including request IDs and context.
+- Preserve key/separator bytes, whitespace, comments, escapes, duplicate keys, encoding and line endings during Apply; byte-exact Restore remains available.
+- Display Key, Original and Russian separately in Preview and Test 20; use value-only Translation Memory across different keys.
+- Skip auxiliary regex/resizer/substitution rules and protect XUnity escape sequences during translation.
+- Add 42 regression cases and a real offline Test 20 / Apply / Restore / cache smoke scenario. Existing offline architecture and updater package format are retained.
+
 ## [0.2.2]
 
 ### Added

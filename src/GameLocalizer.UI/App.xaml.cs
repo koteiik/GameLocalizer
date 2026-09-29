@@ -29,7 +29,7 @@ public partial class App : Application
         collection.AddLogging(b => b.AddProvider(new FileLoggerProvider(Path.Combine(data, "logs"))));
         collection.AddSingleton<IGameDiscoveryService, SteamDiscoveryService>();
         collection.AddSingleton<IEngineDetector, EngineDetector>();
-        foreach (var adapter in new ILocalizationAdapter[] { new JsonLocalizationAdapter(), new XmlLocalizationAdapter(), new CsvLocalizationAdapter(), new CsvLocalizationAdapter('\t'), new IniLocalizationAdapter(), new PoLocalizationAdapter(), new PlainTextLocalizationAdapter() }) collection.AddSingleton(adapter);
+        foreach (var adapter in new ILocalizationAdapter[] { new BepInExLocalizationAdapter(), new JsonLocalizationAdapter(), new XmlLocalizationAdapter(), new CsvLocalizationAdapter(), new CsvLocalizationAdapter('\t'), new IniLocalizationAdapter(), new PoLocalizationAdapter(), new PlainTextLocalizationAdapter() }) collection.AddSingleton(adapter);
         collection.AddSingleton<ResourceScanner>(); collection.AddSingleton<BackupService>();
         collection.AddSingleton<ScanPipeline>(); collection.AddSingleton<ScanWorkspaceService>();
         collection.AddSingleton(new ScanResultRepository(Path.Combine(data, "scans", "scan-" + Guid.NewGuid().ToString("N") + ".db")));

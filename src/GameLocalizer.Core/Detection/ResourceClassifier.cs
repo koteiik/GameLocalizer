@@ -34,15 +34,17 @@ public sealed class ResourceClassifier
         var parts = Parts(path);
         var name = parts.LastOrDefault()?.ToLowerInvariant() ?? "";
         var ext = Path.GetExtension(name);
+        if (Localization.BepInExLocalizationAdapter.AuxiliaryFile(path)) return ResourceKind.ToolConfiguration;
         // Check only directories below the mod root: a parent game's Text folder is not evidence for mod configs.
         var modIndex = Array.FindIndex(parts, ModDirectories.Contains);
-        var modLocalization = modIndex >= 0 && parts.Skip(modIndex + 1).SkipLast(1).Any(LocalizationDirectories.Contains) && WritableLocalizationExtensions.Contains(ext);
+        var modLocalization = modIndex >= 0 && (parts.Skip(modIndex + 1).SkipLast(1).Any(LocalizationDirectories.Contains) ||
+            parts.Skip(modIndex + 1).SkipLast(1).Contains("XUnity.AutoTranslator", StringComparer.OrdinalIgnoreCase) && ext == ".txt") && WritableLocalizationExtensions.Contains(ext);
         var toolName = name.StartsWith("doorstop_config", StringComparison.OrdinalIgnoreCase) || name.StartsWith("winhttp.dll.", StringComparison.OrdinalIgnoreCase) || name == "winhttp.ini" ||
             name.Contains("autotranslator", StringComparison.OrdinalIgnoreCase) || parts.SkipLast(1).Any(p => p.Contains("autotranslator", StringComparison.OrdinalIgnoreCase));
         if (modIndex >= 0 && !modLocalization)
             return IsConfiguration(path) || parts.Skip(modIndex + 1).Any(p => p.Equals("config", StringComparison.OrdinalIgnoreCase) || p.Equals("Launcher", StringComparison.OrdinalIgnoreCase))
                 ? ResourceKind.ToolConfiguration : ResourceKind.ModInfrastructure;
-        if (toolName && !(HasLocalizationDirectory(path) && WritableLocalizationExtensions.Contains(ext))) return ResourceKind.ToolConfiguration;
+        if (toolName && !(HasLocalizationDirectory(path) && WritableLocalizationExtensions.Contains(ext)) && !Localization.BepInExLocalizationAdapter.TranslationPath(path)) return ResourceKind.ToolConfiguration;
         if (parts.SkipLast(1).Any(p => new[] { "config", "configuration", "launcher", "tools" }.Contains(p, StringComparer.OrdinalIgnoreCase)) &&
             !(HasLocalizationDirectory(path) && WritableLocalizationExtensions.Contains(ext))) return ResourceKind.ToolConfiguration;
         if (IsRuntimePath(path) || name is "unity_builtin_extra" or "globalgamemanagers" or "unityplayer.dll") return ResourceKind.EngineRuntime;
@@ -51,6 +53,7 @@ public sealed class ResourceClassifier
             name is "package.json" or "package-lock.json" or "packages-lock.json" || name == "manifest.json" && Has(parts, "Packages") || Has(parts, "PackageCache")) return ResourceKind.AssemblyMetadata;
         if (ext is ".exe" or ".dll" or ".pak" or ".pck" or ".asset" or ".bundle" or ".png" or ".dds" or ".wav" or ".ogg") return ResourceKind.Binary;
         if (modLocalization) return ResourceKind.LocalizationCandidate;
+        if (Localization.BepInExLocalizationAdapter.TranslationPath(path)) return ResourceKind.LocalizationCandidate;
         if (HasLocalizationDirectory(path) && name == "config.ini") return ResourceKind.LocalizationCandidate;
         if (ext is ".config" or ".cfg" or ".cs" or ".shader" || name is "config.ini" or "boot.config" or "appsettings.json" || Has(parts, "cache")) return ResourceKind.TechnicalFile;
         if (!TextExtensions.Contains(ext)) return ResourceKind.Unknown;

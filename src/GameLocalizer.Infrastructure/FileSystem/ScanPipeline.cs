@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Models;
+using GameLocalizer.Core.Localization;
 using Microsoft.Extensions.Logging;
 
 namespace GameLocalizer.Infrastructure.FileSystem;
@@ -18,12 +19,14 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
         {
             ct.ThrowIfCancellationRequested(); files++;
             TextFile? snapshot = null; IReadOnlyList<TextEntry> entries = [];
+            var scannedResource = resource;
             if (resource.Editable)
             {
                 try
                 {
                     snapshot = await TextFiles.ReadAsync(resource.Path, ct);
-                    var adapter = adapters.First(a => a.CanHandle(resource.Path));
+                    var adapter = LocalizationAdapterSelector.Select(adapters, resource.Path, snapshot.Text);
+                    scannedResource = resource with { Format = adapter.Name, Kind = adapter is BepInExLocalizationAdapter ? ResourceKind.LocalizationCandidate : resource.Kind };
                     entries = adapter.Extract(snapshot.Text);
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or System.Text.DecoderFallbackException)
@@ -36,22 +39,22 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
             foreach (var entry in entries)
             {
                 ct.ThrowIfCancellationRequested(); processed++;
-                var sourcePath = ResourceClassifier.IsModPath(root) ? resource.Path : relative;
-                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration, resource.Kind, entry.Context, sourcePath, entry.Key);
+                var sourcePath = ResourceClassifier.IsModPath(root) || BepInExLocalizationAdapter.TranslationPath(resource.Path) ? resource.Path : relative;
+                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration, scannedResource.Kind, entry.Context, sourcePath, entry.Key);
                 // Retain rejected strings for the explicit technical audit filter, never for translation.
                 if (!string.IsNullOrWhiteSpace(entry.Text))
                 {
                     candidates++;
-                    var category = confidence < .35 ? TextCategory.Technical : ResourceClassifier.Category(resource.Kind);
+                    var category = confidence < .35 ? TextCategory.Technical : ResourceClassifier.Category(scannedResource.Kind);
                     var autoSelected = ResourceClassifier.CanAutoSelect(confidence, category);
                     if (autoSelected) selected++;
-                    buffer.Add(new(relative, entry.Key, entry.Text, entry.Context, confidence, autoSelected, category));
+                    buffer.Add(new(relative, entry.Id, entry.Text, entry.Context, confidence, autoSelected, category));
                 }
                 if (processed % BatchSize != 0) continue;
-                yield return new(resource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
+                yield return new(scannedResource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
                 buffer.Clear();
             }
-            yield return new(resource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
+            yield return new(scannedResource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));
         }
     }
 }

@@ -44,7 +44,7 @@ public sealed class ResourceScanner(IEnumerable<ILocalizationAdapter> adapters)
         {
             ct.ThrowIfCancellationRequested();
             // Preserve mod context even when a user selects BepInEx/config itself as the game root.
-            var kind = classifier.Classify(ResourceClassifier.IsModPath(root) ? path : Path.GetRelativePath(root, path));
+            var kind = classifier.Classify(ResourceClassifier.IsModPath(root) || Core.Localization.BepInExLocalizationAdapter.TranslationPath(path) ? path : Path.GetRelativePath(root, path));
             if (Directory.Exists(path))
             {
                 if (kind == ResourceKind.EngineRuntime) yield return new(path, "Directory", false, "Технический каталог: содержимое не сканируется", kind);
