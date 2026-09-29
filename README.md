@@ -4,6 +4,8 @@ Open-source Windows application for creating Russian localizations for PC games.
 
 **Project is in early development.** Version 0.1.0 is a conservative text-resource MVP. It does not automatically translate arbitrary games. The bundled Mock provider is a demonstration dictionary, not an AI translator.
 
+[Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
+
 ## Features
 - Steam library discovery and manual folder selection.
 - Engine evidence and confidence; bounded resource scanning with cancellation.
@@ -62,7 +64,7 @@ Translation memory lives in `%LOCALAPPDATA%/GameLocalizer/memory.db` and scopes 
 - Logs are stored in `%LOCALAPPDATA%/GameLocalizer/logs`; no credentials or translated text are logged. Paths may reveal personal information: inspect logs before sharing.
 
 ## Known Limitations
-Heuristic text selection can miss text or include configuration strings. Review every selected row. Limits: 4 MiB per text file, 100,000 filesystem entries, scan depth 24, 50,000 preview rows. Permissions and game-specific parsers may prevent editing. CSV assumes a header and ID column. This is not a universal game localizer. No OCR, overlay, engine binary adapters, installer or automatic update installation. Repository links/update checks require an actual `owner/GameLocalizer` in Settings until a published repository is configured.
+Heuristic text selection can miss text or include configuration strings. Review every selected row. Limits: 4 MiB per text file, 100,000 filesystem entries, scan depth 24, 50,000 preview rows. Permissions and game-specific parsers may prevent editing. CSV assumes a header and ID column. This is not a universal game localizer. No OCR, overlay, engine binary adapters, installer or automatic update installation. Repository links and optional update checks use `koteiik/GameLocalizer` by default; forks can change this in Settings.
 
 ## Roadmap
 See [ROADMAP.md](ROADMAP.md). The roadmap is guidance, not a commitment.

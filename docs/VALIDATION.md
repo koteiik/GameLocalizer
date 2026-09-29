@@ -12,4 +12,4 @@
 - SHA256 comparison confirmed preview did not alter files and UI Restore returned all seven original files to exactly their original bytes.
 - Automated safety checks cover placeholders/markup, six adapters, immutable originals across repeated applies, stale source hashes, corrupted backups, external changes on restore, traversal/executable rejection, cancellation, encoding, contextual SQLite persistence and batch deduplication.
 
-GitHub repository creation, remote Actions, tag and release are pending GitHub authentication. This document does not claim those checks passed. ZIP/package and logs are local artifacts excluded from Git.
+Repository: https://github.com/koteiik/GameLocalizer. Remote build and release results are recorded in GitHub Actions; this local validation record does not substitute for those checks. ZIP/package and logs are local artifacts excluded from Git.

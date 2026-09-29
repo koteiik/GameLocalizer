@@ -32,6 +32,6 @@ public class AppSettings
     public string TranslationProvider { get; set; } = "Mock";
     public string TargetLanguage { get; set; } = "ru";
     public bool CheckUpdatesOnStartup { get; set; } = true;
-    public string GitHubRepository { get; set; } = "";
+    public string GitHubRepository { get; set; } = "koteiik/GameLocalizer";
     public List<Game> ManualGames { get; set; } = [];
 }
