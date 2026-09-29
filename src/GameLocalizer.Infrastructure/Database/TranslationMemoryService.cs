@@ -22,11 +22,26 @@ public sealed class TranslationMemoryService(string databasePath) : ITranslation
             {
                 ct.ThrowIfCancellationRequested(); Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(databasePath))!);
                 using var db = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath }.ToString()); db.Open();
-                if (!initialized) { Initialize(db); initialized = true; }
+                if (!initialized) { BackupBeforeMigration(db); Initialize(db); initialized = true; }
                 return action(db);
             }, ct).ConfigureAwait(false);
         }
         finally { gate.Release(); }
+    }
+    private void BackupBeforeMigration(SqliteConnection db)
+    {
+        using var check = db.CreateCommand();
+        check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'";
+        if ((long)check.ExecuteScalar()! == 0) return;
+        check.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='MemoryMigrations'";
+        if ((long)check.ExecuteScalar()! != 0)
+        {
+            check.CommandText = "SELECT COUNT(*) FROM MemoryMigrations WHERE Version=2";
+            if ((long)check.ExecuteScalar()! != 0) return;
+        }
+        // SQLite's backup API includes committed WAL pages; copying memory.db alone would not.
+        using var backup = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath + ".migration-v2-" + Guid.NewGuid().ToString("N") + ".bak", Pooling = false }.ToString());
+        backup.Open(); db.BackupDatabase(backup);
     }
     private static void Initialize(SqliteConnection db)
     {

@@ -82,7 +82,7 @@ public sealed partial class MainViewModel : Observable
     }
     public bool HasGame => game != null;
     public bool Busy { get => busy; private set { Set(ref busy, value); Changed(nameof(Idle)); CommandManager.InvalidateRequerySuggested(); } }
-    public bool Idle => !Busy;
+    public bool Idle => !Busy && !Updates.Busy;
     public string Status { get => status; private set => Set(ref status, value); }
     public string Engine { get => engine; private set => Set(ref engine, value); }
     public string ProgressText { get => progressText; private set => Set(ref progressText, value); }
@@ -107,6 +107,7 @@ public sealed partial class MainViewModel : Observable
     public ICommand RestoreCommand { get; }
     public ICommand CancelCommand { get; }
     public ICommand SettingsCommand { get; }
+    public UpdateViewModel Updates { get; }
     public ICommand AboutCommand { get; }
     public ICommand IssuesCommand { get; }
     public ICommand SelectVisibleCommand { get; }
@@ -121,7 +122,10 @@ public sealed partial class MainViewModel : Observable
         this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.repository = repository;
         this.workspace = workspace; this.backup = backup; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
         Settings = applicationSettings ?? settingsService.Load(); this.offlineSettings = offlineSettings; this.glossary = glossary;
-        if (offlineSettings != null) offlineSettings.PropertyChanged += (_, _) => Changed(nameof(ProviderDescription));
+        Updates = new UpdateViewModel(new ReleaseClient(), () => Busy || offlineSettings?.Busy == true, async () => { await ShutdownAsync(); workspace.UnloadModel(); });
+        Updates.PropertyChanged += (_, _) => { Changed(nameof(Idle)); CommandManager.InvalidateRequerySuggested(); };
+        PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Busy)) Updates.RefreshAvailability(); };
+        if (offlineSettings != null) offlineSettings.PropertyChanged += (_, _) => { Changed(nameof(ProviderDescription)); Updates.RefreshAvailability(); };
         foreach (var manual in Settings.ManualGames.Where(g => Directory.Exists(g.Path))) Games.Add(manual);
         InitializeCommand = new AsyncCommand(RefreshGamesAsync, () => Idle);
         AddCommand = new RelayCommand(AddFolder, () => Idle);
@@ -154,7 +158,7 @@ public sealed partial class MainViewModel : Observable
             Changed(nameof(ProviderDescription));
             try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = e.Message; }
         }, () => Idle);
-        AboutCommand = new RelayCommand(() => new AboutWindow(Settings.GitHubRepository) { Owner = Application.Current.MainWindow }.ShowDialog());
+        AboutCommand = new RelayCommand(() => new AboutWindow(Settings.GitHubRepository, Updates) { Owner = Application.Current.MainWindow }.ShowDialog());
         IssuesCommand = new RelayCommand(() => Open($"https://github.com/{Settings.GitHubRepository}/issues"));
         SelectVisibleCommand = new RelayCommand(() => { foreach (var row in Rows) row.Selected = true; }, () => Idle);
         ClearVisibleCommand = new RelayCommand(() => { foreach (var row in Rows) row.Selected = false; }, () => Idle);
@@ -183,17 +187,13 @@ public sealed partial class MainViewModel : Observable
         // Preserve existing object references, especially the selected instance, across refreshes.
         foreach (var item in found) if (Games.All(g => !SamePath(g.Path, item.Path))) Games.Add(item);
         if (IsCurrent(op)) Status = $"В библиотеке игр: {Games.Count}. Выбор сохранён.";
-        if (Settings.CheckUpdatesOnStartup && await updater.CheckAsync(Settings.GitHubRepository, ct) is { } release && IsCurrent(op))
-        {
-            var dialog = new UpdateWindow(release.Version) { Owner = Application.Current.MainWindow };
-            if (dialog.ShowDialog() == true) Open(release.Url);
-        }
+        if (Settings.CheckUpdatesOnStartup) await Updates.CheckAsync(ct);
     });
     public void Cancel() => cancellation?.Cancel();
     private bool IsCurrent(Operation op) => op.SelectionVersion == selectionVersion && op.OperationVersion == operationVersion && ReferenceEquals(op.Game, game);
     private async Task Run(Func<Operation, CancellationToken, Task> action)
     {
-        if (Busy) return;
+        if (!Idle) return;
         var op = new Operation(game, selectionVersion, ++operationVersion, session);
         using var source = new CancellationTokenSource(); cancellation = source; Busy = true; Status = "Выполняется…";
         try { await action(op, source.Token); }

@@ -23,17 +23,12 @@ public sealed class UpdateService
     public static bool ValidRepository(string repository) => Regex.IsMatch(repository, @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$");
     public async Task<(string Version, string Url)?> CheckAsync(string repository, CancellationToken ct)
     {
-        if (!ValidRepository(repository)) return null;
+        if (repository != ReleaseClient.Repository) return null;
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) }; client.DefaultRequestHeaders.UserAgent.ParseAdd("GameLocalizer/" + ApplicationVersion.Current);
-            using var response = await client.GetAsync($"https://api.github.com/repos/{repository}/releases/latest", ct);
-            if (!response.IsSuccessStatusCode) return null;
-            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
-            var tag = doc.RootElement.GetProperty("tag_name").GetString() ?? "";
-            return Version.TryParse(tag.TrimStart('v'), out var version) && version > ApplicationVersion.Current
-                ? (tag, $"https://github.com/{repository}/releases/tag/{Uri.EscapeDataString(tag)}") : null;
+            var release = await new ReleaseClient().LatestAsync(ct);
+            return release != null && ReleaseClient.IsNewer(release, ApplicationVersion.Label) ? (release.Tag, release.PageUrl) : null;
         }
-        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException) { return null; }
+        catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidDataException or FormatException) { return null; }
     }
 }

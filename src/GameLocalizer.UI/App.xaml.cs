@@ -53,7 +53,8 @@ public partial class App : Application
         var closing = false;
         window.Closing += async (_, args) =>
         {
-            if (closing) return;
+            if (closing || vm.Updates.HandoffStarted) return;
+            if (vm.Updates.Busy) { args.Cancel = true; vm.Updates.Cancel(); return; }
             args.Cancel = true;
             if (vm.Busy) { vm.Cancel(); return; }
             try
@@ -64,7 +65,10 @@ public partial class App : Application
             }
             catch (Exception ex) { MessageBox.Show("Не удалось сохранить правки: " + ex.Message); }
         };
-        window.Show(); vm.InitializeCommand.Execute(null);
+        window.Show();
+        try { if (UpdateHandoff.Startup(e.Args) is { } notice) vm.Updates.ShowUpdated(notice); }
+        catch (Exception ex) { services.GetRequiredService<ILogger<App>>().LogWarning("Update startup: {Type}", ex.GetType().Name); }
+        vm.InitializeCommand.Execute(null);
     }
     protected override void OnExit(ExitEventArgs e) { services?.Dispose(); base.OnExit(e); }
 }

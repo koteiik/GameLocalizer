@@ -8,5 +8,11 @@
   <Target Name="PublishLocalModelHost" AfterTargets="Publish" Condition="'$(MSBuildProjectName)' == 'GameLocalizer.UI'">
     <MSBuild Projects="$(MSBuildThisFileDirectory)src/GameLocalizer.ModelHost/GameLocalizer.ModelHost.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir)" />
     <Error Condition="!Exists('$(PublishDir)GameLocalizer.ModelHost.exe')" Text="Local model host missing from publish output" />
+    <MSBuild Projects="$(MSBuildThisFileDirectory)src/GameLocalizer.Updater/GameLocalizer.Updater.csproj" Targets="Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(RuntimeIdentifier);SelfContained=$(SelfContained);PublishDir=$(PublishDir)Updater/" />
+    <Error Condition="!Exists('$(PublishDir)Updater/GameLocalizer.Updater.exe')" Text="Updater missing from publish output" />
+  </Target>
+  <Target Name="CopyLocalUpdater" AfterTargets="Build" Condition="'$(MSBuildProjectName)' == 'GameLocalizer.UI'">
+    <ItemGroup><UpdaterFiles Include="$(MSBuildThisFileDirectory)src/GameLocalizer.Updater/bin/$(Configuration)/net8.0-windows/$(RuntimeIdentifier)/**/*" /></ItemGroup>
+    <Copy SourceFiles="@(UpdaterFiles)" DestinationFiles="@(UpdaterFiles->'$(TargetDir)Updater/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
 </Project>

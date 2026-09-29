@@ -1,4 +1,4 @@
-
+﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
@@ -16,6 +16,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.Tests", "tests\GameLocalizer.Tests\GameLocalizer.Tests.csproj", "{6FBE8600-7C52-47FF-9E18-97D163BEDE29}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.ModelHost", "src\GameLocalizer.ModelHost\GameLocalizer.ModelHost.csproj", "{16D2E1F1-EFB1-4F2A-8CB3-5110BB8053D0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameLocalizer.Updater", "src\GameLocalizer.Updater\GameLocalizer.Updater.csproj", "{B74EDA34-CD4E-4B02-9645-AAD0672561CB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -46,6 +48,10 @@ Global
 		{16D2E1F1-EFB1-4F2A-8CB3-5110BB8053D0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{16D2E1F1-EFB1-4F2A-8CB3-5110BB8053D0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{16D2E1F1-EFB1-4F2A-8CB3-5110BB8053D0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B74EDA34-CD4E-4B02-9645-AAD0672561CB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B74EDA34-CD4E-4B02-9645-AAD0672561CB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B74EDA34-CD4E-4B02-9645-AAD0672561CB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B74EDA34-CD4E-4B02-9645-AAD0672561CB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{9F162E86-1B76-439D-A278-BB1DD071D86E} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
@@ -53,5 +59,6 @@ Global
 		{7B6BA50C-37F9-4226-A916-44DD7AB429C6} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
 		{6FBE8600-7C52-47FF-9E18-97D163BEDE29} = {D312663A-2644-4F82-AF90-58319D5E15A0}
 		{16D2E1F1-EFB1-4F2A-8CB3-5110BB8053D0} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
+		{B74EDA34-CD4E-4B02-9645-AAD0672561CB} = {112B231C-EF0D-4B57-8D39-E362C601AD9D}
 	EndGlobalSection
 EndGlobal

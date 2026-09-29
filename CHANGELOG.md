@@ -6,6 +6,16 @@
 ### Changed
 ### Fixed
 
+## [0.2.2]
+
+### Added
+- Stable semantic-version checks against the official GitHub Releases API, nonmodal update banner, About checks and in-app release notes.
+- Cancellable streamed ZIP download with byte progress, mandatory GitHub SHA256 digest and strict asset/redirect validation.
+- Separate self-contained updater, per-file package manifest, traversal/link protection, installation backup, staged directory replacement and startup rollback.
+- Durable recovery journal, one-time installation-specific update notice, free-space/write-access checks and busy-operation blocking.
+- SQLite backup before legacy Translation Memory migration; preserve downloaded models, user data and existing offline translation architecture.
+- Updater unit/regression tests and documented recovery procedure. Release ZIP includes Updater/ and update-manifest.json.
+
 ## [0.2.1]
 
 ### Fixed

@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.2.1 fixes mod/tool configuration classification and conservative automatic selection. Real offline English → Russian translation, persistent memory and resumable jobs from v0.2.0 are retained. Review every translation before applying it.
+**Project is in early development.** Version 0.2.2 adds in-app GitHub updates with SHA256 verification, a separate updater, installation backup and startup rollback. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -20,6 +20,8 @@ Open-source Windows application for creating Russian localizations for PC games.
 
 ## Installation
 Windows 10/11 x64. Once a release is published: **Releases → Latest → GameLocalizer-win-x64.zip**. Extract all files and run `GameLocalizer.exe`. The ZIP contains the .NET runtime; Visual Studio and a separate runtime installation are not required. This early build is unsigned.
+
+From v0.2.2 onward, use **Обновить** in the update banner or **О программе**. Release notes, download progress and cancellation are available inside the application. Updates preserve the downloaded model, Translation Memory and game backups. Install v0.2.2 manually once when upgrading from earlier versions. Keep the complete `Updater/` folder beside the executable and use a writable installation directory outside the application's LocalAppData directory. See [Updating and recovery](docs/UPDATING.md) for verification, backup locations and interrupted-update recovery.
 
 ## How It Works
 1. Select a discovered Steam game or choose **Добавить игру вручную**.
