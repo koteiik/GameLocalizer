@@ -41,7 +41,7 @@ public sealed class ScanRegressionTests : IDisposable
     [InlineData("output_log.txt", ResourceKind.LogFile)][InlineData("Player.log", ResourceKind.LogFile)]
     [InlineData("debug.log", ResourceKind.LogFile)][InlineData("crash.log", ResourceKind.LogFile)][InlineData("error.log", ResourceKind.LogFile)]
     [InlineData("logs/menu.json", ResourceKind.LogFile)][InlineData("Localization/output_log.txt", ResourceKind.LogFile)]
-    [InlineData("Localization/menu.json", ResourceKind.LocalizationCandidate)][InlineData("StreamingAssets/en.txt", ResourceKind.LocalizationCandidate)]
+    [InlineData("Localization/menu.json", ResourceKind.UIResource)][InlineData("StreamingAssets/en.txt", ResourceKind.LocalizationCandidate)]
     [InlineData("config.ini", ResourceKind.TechnicalFile)][InlineData("game.dll", ResourceKind.Binary)]
     [InlineData("notes.txt", ResourceKind.PossibleTextResource)][InlineData("unknown.xyz", ResourceKind.Unknown)]
     public void ClassifiesResources(string path, ResourceKind expected) => Assert.Equal(expected, new ResourceClassifier().Classify(path));
@@ -52,7 +52,8 @@ public sealed class ScanRegressionTests : IDisposable
         Write("menu.ini", "enabled=true\noff=false\nempty=null\nflag=yes\nflag2=no\nplay=Start Game\nrenderer=Renderer");
         var entries = new List<ScanEntry>();
         await foreach (var batch in Pipeline().ScanAsync(root, default)) entries.AddRange(batch.Entries);
-        var entry = Assert.Single(entries); Assert.Equal("Start Game", entry.Original); Assert.Equal("menu.ini", entry.FilePath);
+        Assert.All(entries.Where(e => e.Category == TextCategory.Technical), e => Assert.False(e.Selected));
+        var entry = Assert.Single(entries, e => e.Category != TextCategory.Technical); Assert.Equal("Start Game", entry.Original); Assert.Equal("menu.ini", entry.FilePath);
     }
     internal static void Generate(string directory, int count)
     {

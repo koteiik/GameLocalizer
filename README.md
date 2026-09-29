@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.1.1 fixes game selection and large scans in the conservative text-resource MVP. It does not automatically translate arbitrary games. The bundled Mock provider is a demonstration dictionary, not an AI translator.
+**Project is in early development.** Version 0.1.2 filters Unity runtime/documentation and uses conservative selection in the conservative text-resource MVP. It does not automatically translate arbitrary games. The bundled Mock provider is a demonstration dictionary, not an AI translator.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -11,7 +11,8 @@ Open-source Windows application for creating Russian localizations for PC games.
 - Engine evidence and confidence; bounded resource scanning with cancellation.
 - Editable 2,000-row pages with full-dataset search, sorting, status/file/confidence filters and selection.
 - Streaming batches and a temporary SQLite scan cache; no 50,000-row aggregate limit.
-- Logs/engine diagnostics excluded; localization resources prioritized in the resource catalog.
+- Unity runtime directories, assembly metadata, API documentation XML, logs and engine diagnostics excluded before translation.
+- Source categories, conservative automatic selection (confidence ≥85%), doubtful/technical audit filters and global counters.
 - Structured JSON/XML/CSV/TSV/INI/singular PO/plain-text adapters.
 - Placeholder protection and validation before applying translations.
 - Contextual batches, SQLite translation memory, immutable original backups, SHA256 validation and restore.
@@ -25,11 +26,13 @@ Windows 10/11 x64. Once a release is published: **Releases → Latest → GameLo
 2. **Анализировать** identifies the engine and lists resources, including formats needing future adapters.
 3. **Найти текст** extracts likely player-visible strings. No files are modified.
 4. **Перевести (Mock)** translates selected empty rows. Edit the Russian column; double-click a cell to edit it.
-5. Review selection, placeholders and errors. Use **← Назад / Далее →** to change pages. Search, filters and the sorting selector operate on the entire database. **Выбрать страницу / Снять страницу** change only the loaded page; other pages keep their selection. Found/shown/selected counters summarize the dataset.
+5. Review selection, placeholders and errors. Use **← Назад / Далее →** to change pages. Search, filters and the sorting selector operate on the entire database. **Выбрать страницу / Снять страницу** change only the loaded page; other pages keep their selection. Category identifies the source. Automatic selection requires confidence ≥85%; 60–84% is visible but unselected. **Все** hides technical rows and confidence <60%; **Сомнительные** shows nontechnical rows below 85%, and **Технические** shows rejected values found inside otherwise eligible resources. These two audit filters ignore the confidence slider. Technical rows cannot be selected. Status, search and file filters still apply.
 6. Close the game, then **Применить**. Translation and application process all selected rows across all pages, including rows hidden by filters. Every selected translation must be valid. Manual edits are flushed to the scan cache before paging or applying.
 7. **Восстановить** returns every backed-up file to its original bytes. Keep the backup folder.
 
-Try a **copy** of `samples/SampleGames/Demo` first. For a large scan, run `samples/SampleGames/LargeSynthetic/Generate.ps1` to create 120,005 rows in `artifacts/large-synthetic`. Samples are synthetic and contain no commercial game assets.
+Try a **copy** of `samples/SampleGames/Demo` first. For a large scan, run `samples/SampleGames/LargeSynthetic/Generate.ps1` to create 120,005 rows in `artifacts/large-synthetic`. Use `samples/SampleGames/UnitySynthetic` for the Unity filtering regression fixture (12 technical values excluded from selection, 10 player-facing values selected, 2 uncertain words unselected). Samples are synthetic and contain no commercial game assets.
+
+Counters cover extracted values across all pages: **Пользовательский текст** means high confidence (≥85%), **Сомнительные** means lower-confidence nontechnical values, and **Технические** means rejected values. Their sum equals **Найдено всего**. Excluded runtime directories are never traversed and documentation XML is not extracted; their unknown string counts are not invented or included. See the resource catalog for excluded sources.
 
 ## Supported Launchers
 Steam (registry, default installation and VDF libraries); manual folders. Epic, GOG and Xbox are future integrations through `IGameDiscoveryService`.
@@ -66,7 +69,7 @@ Translation memory lives in `%LOCALAPPDATA%/GameLocalizer/memory.db` and scopes 
 - Logs are stored in `%LOCALAPPDATA%/GameLocalizer/logs`; no credentials or translated text are logged. Paths may reveal personal information: inspect logs before sharing.
 
 ## Known Limitations
-Heuristic text selection can miss text or include configuration strings. Review every selected row. **Scan limits and display limits are separate:** scanning has no aggregate row limit; parsing retains a 4 MiB per-file safety limit and directory depth 24. The UI holds at most 2,000 preview rows and 2,000 prioritized catalog entries. The full scan result is queried from a per-process SQLite cache under `%LOCALAPPDATA%/GameLocalizer/scans`, removed on normal exit; scan previews are temporary, not a saved project. Translation memory and backups remain persistent. A crash can leave an unused scan cache. Logs, binaries and known technical files are listed but not extracted. CSV assumes a header and ID column. This is not a universal game localizer. No OCR, overlay, engine binary adapters, installer or automatic update installation. Repository links and optional update checks use `koteiik/GameLocalizer` by default; forks can change this in Settings.
+Heuristic text selection can miss text or include configuration strings. Review every selected row. **Scan limits and display limits are separate:** scanning has no aggregate row limit; parsing retains a 4 MiB per-file safety limit and directory depth 24. The UI holds at most 2,000 preview rows and 2,000 prioritized catalog entries. The full scan result is queried from a per-process SQLite cache under `%LOCALAPPDATA%/GameLocalizer/scans`, removed on normal exit; scan previews are temporary, not a saved project. Translation memory and backups remain persistent. A crash can leave an unused scan cache. Logs, binaries and known technical files are listed but not extracted. Managed/Mono/IL2CPP/assembly/metadata directories and Unity *_Data Plugins/Native directories are pruned; the catalog shows excluded directory roots, not their contents. XML beside assemblies and XML with doc/members/member API structure are excluded. Games storing real dialogue in excluded directories need a future specialized adapter. Heuristics cannot prove a string is player-visible. CSV assumes a header and ID column. This is not a universal game localizer. No OCR, overlay, engine binary adapters, installer or automatic update installation. Repository links and optional update checks use `koteiik/GameLocalizer` by default; forks can change this in Settings.
 
 ## Roadmap
 See [ROADMAP.md](ROADMAP.md). The roadmap is guidance, not a commitment.

@@ -24,7 +24,7 @@ public sealed class EngineDetector : IEngineDetector
 
 public static class SafeTree
 {
-    public static IEnumerable<string> Enumerate(string root, CancellationToken ct, int maxDepth = 24, int maxEntries = int.MaxValue)
+    public static IEnumerable<string> Enumerate(string root, CancellationToken ct, int maxDepth = 24, int maxEntries = int.MaxValue, Func<string, bool>? descend = null)
     {
         var seen = 0;
         return Walk(root, 0);
@@ -49,7 +49,7 @@ public static class SafeTree
                 try { attributes = File.GetAttributes(entry); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
                 if (attributes.HasFlag(FileAttributes.ReparsePoint) || Path.GetFileName(entry).Equals("GameLocalizer_Backup", StringComparison.OrdinalIgnoreCase)) continue;
                 yield return entry;
-                if (attributes.HasFlag(FileAttributes.Directory) && depth < maxDepth)
+                if (attributes.HasFlag(FileAttributes.Directory) && depth < maxDepth && (descend?.Invoke(entry) ?? true))
                     foreach (var child in Walk(entry, depth + 1)) yield return child;
             }
         }

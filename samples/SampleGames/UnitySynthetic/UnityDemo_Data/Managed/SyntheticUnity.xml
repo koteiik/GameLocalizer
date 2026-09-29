@@ -1,0 +1,6 @@
+<doc><assembly><name>SyntheticUnity</name></assembly><members>
+<member name="T:UnityEngine.AccessibilityModule"><summary>A class containing methods to assist with accessibility</summary></member>
+<member name="T:UnityEngine.AIModule"><summary>Singleton class to access the baked NavMesh</summary></member>
+<member name="P:UnityEngine.Agent.Future"><summary>Describes how far in the future the agents predict</summary></member>
+<member name="P:UnityEngine.Agent.Nodes"><summary>The maximum amount of nodes processed each iteration</summary></member>
+</members></doc>

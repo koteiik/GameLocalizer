@@ -107,6 +107,24 @@ public sealed class ViewModelRegressionTests
         detector.Release.Dispose();
     });
     [Fact]
+    public Task CategoryFiltersAndBulkSelectionNeverSelectTechnicalRows() => OnDispatcher(async () =>
+    {
+        using var f = new Fixture(); var vm = f.Vm;
+        File.WriteAllText(Path.Combine(f.First.Path, "notes.txt"), "UnityEngine.AIModule\nLantern\nlantern");
+        vm.SelectedGame = f.First; await vm.FindSelectedAsync();
+        Assert.Equal(4, vm.TotalCount); Assert.Equal(1, vm.SelectedCount); Assert.Equal(2, vm.Rows.Count);
+        Assert.Contains("Пользовательский текст: 1", vm.Counters); Assert.Contains("Технические: 1", vm.Counters);
+        vm.Filter = "Технические"; await vm.PreviewTask;
+        var technical = Assert.Single(vm.Rows); Assert.Equal(TextCategory.Technical, technical.Category);
+        vm.SelectVisibleCommand.Execute(null); await vm.FlushEditsAsync();
+        Assert.False(technical.Selected); Assert.False(technical.CanSelect); Assert.Equal(1, vm.SelectedCount);
+        vm.Filter = "Сомнительные"; await vm.PreviewTask;
+        Assert.Equal(2, vm.Rows.Count); Assert.All(vm.Rows, r => Assert.False(r.Selected));
+        vm.Filter = "Высокая уверенность"; await vm.PreviewTask; Assert.Single(vm.Rows);
+        vm.Filter = "Выбранные"; await vm.PreviewTask; Assert.Single(vm.Rows);
+        await vm.ShutdownAsync();
+    });
+    [Fact]
     public Task ViewModelUsesOnlyOnePageAndPersistsOffPageEdits() => OnDispatcher(async () =>
     {
         using var f = new Fixture(); var vm = f.Vm; ScanRegressionTests.Generate(f.First.Path, 100005);

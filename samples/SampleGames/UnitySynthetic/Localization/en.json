@@ -1,0 +1,10 @@
+{
+  "menu.continue": "Continue",
+  "menu.settings": "Settings",
+  "menu.start": "Start Game",
+  "assembly.accessibility": "UnityEngine.AccessibilityModule",
+  "assembly.ai": "UnityEngine.AIModule",
+  "assembly.system": "System.Collections.Generic",
+  "assembly.type": "Namespace.Class",
+  "assembly.method": "Namespace.Class.Method"
+}

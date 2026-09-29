@@ -35,7 +35,9 @@ public sealed class MainViewModel : Observable
     private string? session;
     private bool busy;
     private string status = "Готово", engine = "Unknown", search = "", fileFilter = "", mode = "Все", progressText = "";
-    private double minimumConfidence = .5;
+    private double minimumConfidence = .6;
+    private string filter = "Все";
+    private long userTextCount, doubtfulCount, technicalCount;
     private int pageIndex;
     private long totalCount, matchingCount, selectedCount;
     private ScanSort sort;
@@ -48,6 +50,8 @@ public sealed class MainViewModel : Observable
     public string WindowTitle => "GameLocalizer " + ApplicationVersion.Label;
     public string VersionDescription => ApplicationVersion.Label + " · Русская локализация игр · Ранний MVP";
     public string[] Modes { get; } = ["Все", "Не переведено", "Validation Error"];
+    public string[] Filters { get; } = ["Все", "Выбранные", "Высокая уверенность", "Сомнительные", "Технические"];
+    public string Filter { get => filter; set { if (filter == value) return; Set(ref filter, value); FilterChanged(); } }
     public ScanSort[] Sorts { get; } = Enum.GetValues<ScanSort>();
     public Task PreviewTask { get; private set; } = Task.CompletedTask;
     public Task EditSaveTask { get; private set; } = Task.CompletedTask;
@@ -88,7 +92,7 @@ public sealed class MainViewModel : Observable
     public long MatchingCount { get => matchingCount; private set { Set(ref matchingCount, value); Changed(nameof(PageSummary)); CommandManager.InvalidateRequerySuggested(); } }
     public long SelectedCount { get => selectedCount; private set { Set(ref selectedCount, value); Changed(nameof(Counters)); CommandManager.InvalidateRequerySuggested(); } }
     public int PageIndex => pageIndex;
-    public string Counters => $"Найдено: {TotalCount:N0}   Показано: {Rows.Count:N0}   Выбрано: {SelectedCount:N0}";
+    public string Counters => $"Найдено всего: {TotalCount:N0}   Пользовательский текст: {userTextCount:N0}   Сомнительные: {doubtfulCount:N0}   Технические: {technicalCount:N0}   Выбрано: {SelectedCount:N0}";
     public string PageSummary => MatchingCount == 0 ? "Нет совпадений" : $"{pageIndex * ScanResultRepository.PageSize + 1:N0}–{pageIndex * ScanResultRepository.PageSize + Rows.Count:N0} из {MatchingCount:N0}";
     public ICommand InitializeCommand { get; }
     public ICommand AddCommand { get; }
@@ -257,10 +261,10 @@ public sealed class MainViewModel : Observable
         await Task.Run(() => workspace.TranslateAsync(op.Game, op.Session, progress, ct), ct);
         if (IsCurrent(op)) Status = "Mock-перевод готов. [ДЕМО] требует ручного перевода. Проверьте все выбранные страницы.";
     });
-    private ScanQuery Query() => new(Search, FileFilter, Mode, MinimumConfidence, Sort, Descending);
+    private ScanQuery Query() => new(Search, FileFilter, Mode, MinimumConfidence, Sort, Descending, Filter);
     private void ClearPreview()
     {
-        pageVersion++; Rows.Clear(); pageIndex = 0; TotalCount = MatchingCount = SelectedCount = 0;
+        pageVersion++; Rows.Clear(); pageIndex = 0; TotalCount = MatchingCount = SelectedCount = 0; userTextCount = doubtfulCount = technicalCount = 0;
         Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));
     }
     private void FilterChanged() { pageIndex = 0; PreviewTask = RefreshPreviewAsync(true); }
@@ -286,7 +290,7 @@ public sealed class MainViewModel : Observable
             foreach (var item in result.Rows)
             {
                 var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, Key = item.Key, Context = item.Context,
-                    Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation };
+                    Category = item.Category, Confidence = item.Confidence, Selected = item.Selected, Russian = item.Translation };
                 var lastSelected = row.Selected;
                 row.PropertyChanged += (_, e) =>
                 {
@@ -298,6 +302,7 @@ public sealed class MainViewModel : Observable
                 };
                 Rows.Add(row);
             }
+            userTextCount = result.UserText; doubtfulCount = result.Doubtful; technicalCount = result.Technical;
             TotalCount = Busy ? Math.Max(TotalCount, result.Total) : result.Total;
             MatchingCount = result.Matching; SelectedCount = Busy ? Math.Max(SelectedCount, result.Selected) : result.Selected;
             Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));

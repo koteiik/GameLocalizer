@@ -36,12 +36,15 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
             foreach (var entry in entries)
             {
                 ct.ThrowIfCancellationRequested(); processed++;
-                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration);
-                if (confidence >= .35)
+                var confidence = detector.Score(entry.Text, frequencies[entry.Text], isConfiguration, resource.Kind, entry.Context);
+                // Retain rejected strings for the explicit technical audit filter, never for translation.
+                if (!string.IsNullOrWhiteSpace(entry.Text))
                 {
                     candidates++;
-                    if (confidence >= .6) selected++;
-                    buffer.Add(new(relative, entry.Key, entry.Text, entry.Context, confidence, confidence >= .6));
+                    var category = confidence < .35 ? TextCategory.Technical : ResourceClassifier.Category(resource.Kind);
+                    var autoSelected = confidence >= .85 && category != TextCategory.Technical;
+                    if (autoSelected) selected++;
+                    buffer.Add(new(relative, entry.Key, entry.Text, entry.Context, confidence, autoSelected, category));
                 }
                 if (processed % BatchSize != 0) continue;
                 yield return new(resource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));

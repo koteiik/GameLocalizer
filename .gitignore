@@ -19,3 +19,4 @@ appsettings.local.json
 settings.json
 games/
 !samples/SampleGames/**
+**/TestResults/

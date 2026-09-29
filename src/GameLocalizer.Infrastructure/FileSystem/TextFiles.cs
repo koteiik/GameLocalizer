@@ -34,15 +34,41 @@ public sealed class ResourceScanner(IEnumerable<ILocalizationAdapter> adapters)
     private readonly ResourceClassifier classifier = new();
     public IEnumerable<Resource> Enumerate(string root, CancellationToken ct)
     {
-        foreach (var path in SafeTree.Enumerate(root, ct).Where(File.Exists))
+        ct.ThrowIfCancellationRequested();
+        if (ResourceClassifier.IsRuntimePath(root))
+        {
+            yield return new(root, "Directory", false, "Технический каталог: содержимое не сканируется", ResourceKind.EngineRuntime);
+            yield break;
+        }
+        foreach (var path in SafeTree.Enumerate(root, ct, descend: p => !ResourceClassifier.IsRuntimePath(Path.GetRelativePath(root, p))))
         {
             ct.ThrowIfCancellationRequested();
             var kind = classifier.Classify(Path.GetRelativePath(root, path));
+            if (Directory.Exists(path))
+            {
+                if (kind == ResourceKind.EngineRuntime) yield return new(path, "Directory", false, "Технический каталог: содержимое не сканируется", kind);
+                continue;
+            }
             var adapter = adapters.FirstOrDefault(a => a.CanHandle(path));
             bool tooLarge;
             try { tooLarge = new FileInfo(path).Length > TextFiles.MaxBytes; }
-            catch (IOException) { continue; }
-            var candidate = kind is ResourceKind.LocalizationCandidate or ResourceKind.PossibleTextResource;
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { continue; }
+            if (ResourceClassifier.IsExtractable(kind) && Path.GetExtension(path).Equals(".xml", StringComparison.OrdinalIgnoreCase))
+            {
+                if (File.Exists(Path.ChangeExtension(path, ".dll")) || File.Exists(Path.ChangeExtension(path, ".exe"))) kind = ResourceKind.TechnicalDocumentation;
+                else if (!tooLarge)
+                {
+                    try
+                    {
+                        using var stream = File.OpenRead(path);
+                        using var reader = new StreamReader(stream, new UTF8Encoding(false, true), true);
+                        if (ResourceClassifier.IsDocumentationXml(reader, ct)) kind = ResourceKind.TechnicalDocumentation;
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Xml.XmlException or DecoderFallbackException)
+                    { kind = ResourceKind.Unknown; }
+                }
+            }
+            var candidate = ResourceClassifier.IsExtractable(kind);
             yield return new(path, adapter?.Name ?? Path.GetExtension(path), candidate && adapter != null && !tooLarge,
                 !candidate ? "Исключён по умолчанию" : tooLarge ? "Размер > 4 MiB" : adapter == null ? "Только обнаружение: нужен адаптер" : "Доступен для извлечения", kind);
         }

@@ -1,0 +1,4 @@
+<doc><members>
+<member name="M:Example.Engine.Get"><summary>Gets the current engine instance.</summary></member>
+<member name="M:Example.Engine.Set"><summary>Sets the current engine instance.</summary></member>
+</members></doc>
