@@ -13,7 +13,7 @@ namespace GameLocalizer.Tests;
 
 public sealed class ViewModelRegressionTests
 {
-    private static Task OnDispatcher(Func<Task> action)
+    private static Task OnDispatcher(Func<Task> action, int timeoutSeconds = 60)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
@@ -27,7 +27,7 @@ public sealed class ViewModelRegressionTests
             }));
             Dispatcher.Run();
         }) { IsBackground = true };
-        thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task.WaitAsync(TimeSpan.FromSeconds(60));
+        thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task.WaitAsync(TimeSpan.FromSeconds(timeoutSeconds));
     }
     private sealed class Fixture : IDisposable
     {
@@ -155,5 +155,5 @@ public sealed class ViewModelRegressionTests
         Assert.Equal(1, vm.TotalCount); Assert.Empty(vm.Rows); // Full-dataset filter still active.
         vm.Search = ""; await vm.PreviewTask; Assert.Equal("Continue", Assert.Single(vm.Rows).Original);
         await vm.EditSaveTask;
-    });
+    }, timeoutSeconds: 300); // Full 100k-row scan competes with durable-write updater tests on hosted Windows runners.
 }
