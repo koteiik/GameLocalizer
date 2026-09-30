@@ -26,7 +26,7 @@ public sealed class UpdateService
         if (repository != ReleaseClient.Repository) return null;
         try
         {
-            var release = await new ReleaseClient().LatestAsync(ct);
+            var release = await new ReleaseClient(installed: new InstallationInfoService().GetInfo().Installed).LatestAsync(ct);
             return release != null && ReleaseClient.IsNewer(release, ApplicationVersion.Label) ? (release.Tag, release.PageUrl) : null;
         }
         catch (Exception e) when (e is HttpRequestException or JsonException or TaskCanceledException or InvalidDataException or FormatException) { return null; }

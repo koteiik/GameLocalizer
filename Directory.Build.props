@@ -1,1 +1,12 @@
-<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><Version>0.2.3</Version><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework><Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings>
+    <Version>0.3.0</Version><TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InstallerAppId Condition="'$(InstallerAppId)' == ''">C341D9A2-48B9-4B79-AD30-2674B96BD760</InstallerAppId>
+    <UserDataDirectoryName Condition="'$(UserDataDirectoryName)' == ''">GameLocalizer</UserDataDirectoryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="InstallerAppId" Value="$(InstallerAppId)" />
+    <AssemblyMetadata Include="UserDataDirectoryName" Value="$(UserDataDirectoryName)" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net8.0-windows</TargetFramework><UseWPF>true</UseWPF></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/GameLocalizer.UI/GameLocalizer.UI.csproj" /></ItemGroup>
+</Project>

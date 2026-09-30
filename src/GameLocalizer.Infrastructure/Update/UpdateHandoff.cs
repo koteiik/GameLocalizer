@@ -5,7 +5,7 @@ namespace GameLocalizer.Infrastructure.Update;
 
 public sealed class UpdateHandoff
 {
-    public static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameLocalizer", "Updates");
+    public static string Root => Path.Combine(Core.Models.ApplicationPaths.UserData, "Updates");
     public static async Task<string> PrepareAsync(AppRelease release, string zip, CancellationToken ct)
     {
         var install = UpdatePaths.Canonical(AppContext.BaseDirectory);

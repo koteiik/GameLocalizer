@@ -122,7 +122,8 @@ public sealed partial class MainViewModel : Observable
         this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.repository = repository;
         this.workspace = workspace; this.backup = backup; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
         Settings = applicationSettings ?? settingsService.Load(); this.offlineSettings = offlineSettings; this.glossary = glossary;
-        Updates = new UpdateViewModel(new ReleaseClient(), () => Busy || offlineSettings?.Busy == true, async () => { await ShutdownAsync(); workspace.UnloadModel(); });
+        var installation = new InstallationInfoService().GetInfo();
+        Updates = new UpdateViewModel(new ReleaseClient(installed: installation.Installed), () => Busy || offlineSettings?.Busy == true, async () => { await ShutdownAsync(); workspace.UnloadModel(); }, installation);
         Updates.PropertyChanged += (_, _) => { Changed(nameof(Idle)); CommandManager.InvalidateRequerySuggested(); };
         PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Busy)) Updates.RefreshAvailability(); };
         if (offlineSettings != null) offlineSettings.PropertyChanged += (_, _) => { Changed(nameof(ProviderDescription)); Updates.RefreshAvailability(); };

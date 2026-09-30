@@ -21,10 +21,12 @@ namespace GameLocalizer.UI;
 public partial class App : Application
 {
     private ServiceProvider? services;
+    private Mutex? installerMutex;
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        var data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameLocalizer");
+        installerMutex = new Mutex(false, ApplicationPaths.AppMutex);
+        var data = ApplicationPaths.UserData;
         var collection = new ServiceCollection();
         collection.AddLogging(b => b.AddProvider(new FileLoggerProvider(Path.Combine(data, "logs"))));
         collection.AddSingleton<IGameDiscoveryService, SteamDiscoveryService>();
@@ -68,7 +70,8 @@ public partial class App : Application
         window.Show();
         try { if (UpdateHandoff.Startup(e.Args) is { } notice) vm.Updates.ShowUpdated(notice); }
         catch (Exception ex) { services.GetRequiredService<ILogger<App>>().LogWarning("Update startup: {Type}", ex.GetType().Name); }
+        if (e.Args.Contains("--installer-updated") && new InstallationInfoService().GetInfo().Installed) vm.Updates.ShowInstallerUpdated();
         vm.InitializeCommand.Execute(null);
     }
-    protected override void OnExit(ExitEventArgs e) { services?.Dispose(); base.OnExit(e); }
+    protected override void OnExit(ExitEventArgs e) { services?.Dispose(); installerMutex?.Dispose(); base.OnExit(e); }
 }

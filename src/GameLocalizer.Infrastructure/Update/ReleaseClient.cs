@@ -34,11 +34,11 @@ public sealed record SemanticVersion(int Major, int Minor, int Patch, string Pre
     public override string ToString() => $"{Major}.{Minor}.{Patch}" + (Prerelease.Length == 0 ? "" : "-" + Prerelease);
 }
 
-public sealed record AppRelease(string Tag, string Notes, long Size, string? Sha256)
+public sealed record AppRelease(string Tag, string Notes, long Size, string? Sha256, string Asset = ReleaseClient.AssetName)
 {
     public SemanticVersion Version => SemanticVersion.Parse(Tag);
     public string PageUrl => $"https://github.com/{ReleaseClient.Repository}/releases/tag/{Tag}";
-    public string DownloadUrl => $"https://github.com/{ReleaseClient.Repository}/releases/download/{Tag}/{ReleaseClient.AssetName}";
+    public string DownloadUrl => $"https://github.com/{ReleaseClient.Repository}/releases/download/{Tag}/{Asset}";
     public bool CanInstall => Size > 0 && Size <= ReleaseClient.MaximumZipBytes && Sha256 != null && Regex.IsMatch(Sha256, "^[a-fA-F0-9]{64}$");
 }
 public record UpdateDownloadProgress(long Received, long Total);
@@ -47,27 +47,30 @@ public record UpdateDownloadProgress(long Received, long Total);
 public sealed class ReleaseClient
 {
     public const string Repository = "koteiik/GameLocalizer";
+    public const string InstallerAssetName = "GameLocalizer-Setup.exe";
     public const string AssetName = "GameLocalizer-win-x64.zip";
     public const long MaximumZipBytes = 512L * 1024 * 1024;
     private static readonly HttpClient Shared = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(15) };
     private readonly HttpClient client;
-    public ReleaseClient(HttpClient? client = null) => this.client = client ?? Shared;
+    private readonly bool installed;
+    public ReleaseClient(HttpClient? client = null, bool installed = false) { this.client = client ?? Shared; this.installed = installed; }
     public static bool IsNewer(AppRelease release, string current) => release.Version.Prerelease.Length == 0 && release.Version.CompareTo(SemanticVersion.Parse(current)) > 0;
-    public static AppRelease? ParseRelease(string json)
+    public static AppRelease? ParseRelease(string json, bool installed = false)
     {
         using var document = JsonDocument.Parse(json); var root = document.RootElement;
         if (root.GetProperty("prerelease").GetBoolean() || root.GetProperty("draft").GetBoolean()) return null;
         var tag = root.GetProperty("tag_name").GetString() ?? "";
         var version = SemanticVersion.Parse(tag);
         if (version.Prerelease.Length != 0 || tag != "v" + version) return null;
-        var assets = root.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == AssetName).ToArray();
-        if (assets.Length != 1) throw new InvalidDataException("В релизе отсутствует однозначный Windows ZIP.");
+        var assetName = installed ? InstallerAssetName : AssetName;
+        var assets = root.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).ToArray();
+        if (assets.Length != 1) throw new InvalidDataException("В релизе отсутствует однозначный пакет Windows.");
         var asset = assets[0];
-        var expected = $"https://github.com/{Repository}/releases/download/{tag}/{AssetName}";
+        var expected = $"https://github.com/{Repository}/releases/download/{tag}/{assetName}";
         if (asset.GetProperty("browser_download_url").GetString() != expected) throw new InvalidDataException("Недоверенный адрес обновления.");
         var digest = asset.TryGetProperty("digest", out var d) ? d.GetString() : null;
         var sha = digest != null && Regex.IsMatch(digest, "^sha256:[a-fA-F0-9]{64}$") ? digest[7..] : null;
-        return new(tag, root.TryGetProperty("body", out var body) ? body.GetString() ?? "" : "", asset.GetProperty("size").GetInt64(), sha);
+        return new(tag, root.TryGetProperty("body", out var body) ? body.GetString() ?? "" : "", asset.GetProperty("size").GetInt64(), sha, assetName);
     }
     private static HttpRequestMessage Request(string url)
     {
@@ -89,13 +92,13 @@ public sealed class ReleaseClient
             if (buffer.Length + read > 2 * 1024 * 1024) throw new InvalidDataException("Ответ GitHub слишком велик.");
             buffer.Write(bytes, 0, read);
         }
-        return ParseRelease(System.Text.Encoding.UTF8.GetString(buffer.ToArray()));
+        return ParseRelease(System.Text.Encoding.UTF8.GetString(buffer.ToArray()), installed);
     }
     public async Task<string> DownloadAsync(AppRelease release, string updatesRoot, IProgress<UpdateDownloadProgress>? progress, CancellationToken ct)
     {
-        if (!release.CanInstall || release.Tag != "v" + release.Version || release.Version.Prerelease.Length != 0) throw new InvalidDataException("GitHub не предоставил доверенный SHA256. Скачайте ZIP вручную.");
+        if (!release.CanInstall || release.Asset is not (AssetName or InstallerAssetName) || release.Tag != "v" + release.Version || release.Version.Prerelease.Length != 0) throw new InvalidDataException("GitHub не предоставил доверенный SHA256. Скачайте ZIP вручную.");
         var directory = Path.Combine(updatesRoot, release.Tag); UpdatePaths.NoLinks(directory); Directory.CreateDirectory(directory);
-        var final = Path.Combine(directory, AssetName); var partial = final + ".partial-" + Guid.NewGuid().ToString("N");
+        var final = Path.Combine(directory, release.Asset); var partial = final + ".partial-" + Guid.NewGuid().ToString("N");
         HttpResponseMessage? response = null;
         try
         {

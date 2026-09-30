@@ -11,10 +11,11 @@ public sealed class AboutWindow : Window
     public AboutWindow(string repository, UpdateViewModel updates)
     {
         Style = (Style)FindResource(typeof(Window));
-        Title = "О программе"; Width = 440; Height = 540; WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        Title = "О программе"; Width = 500; Height = 660; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var panel = new StackPanel { Margin = new Thickness(25) }; Content = panel;
         panel.Children.Add(new TextBlock { Text = "GameLocalizer\n" + ApplicationVersion.Label + "\nMIT License", FontSize = 24, Margin = new Thickness(0, 0, 0, 15) });
         DataContext = updates;
+        panel.Children.Add(new TextBlock { Text = updates.InstallationDescription, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
         System.ComponentModel.PropertyChangedEventHandler changed = (_, e) => { if (e.PropertyName == nameof(updates.Busy) && updates.Busy) Close(); };
         updates.PropertyChanged += changed; Closed += (_, _) => updates.PropertyChanged -= changed;
         var latest = new TextBlock(); latest.SetBinding(TextBlock.TextProperty, new Binding("LatestVersion") { StringFormat = "Последняя версия: {0}" }); panel.Children.Add(latest);
