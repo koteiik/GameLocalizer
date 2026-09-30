@@ -1,0 +1,34 @@
+name: Installer E2E
+on:
+  push:
+    branches: [main, 'codex/installer-*']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  installer-e2e:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Clean Windows VM installer lifecycle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory artifacts/installer-qa -Force | Out-Null
+          ./scripts/Test-Installer.ps1 -Phase All *>&1 | Tee-Object artifacts/installer-qa/e2e.log
+      - name: Retain test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-e2e-evidence
+          path: |
+            artifacts/installer-qa/*.log
+            artifacts/installer-qa/*button.txt
+            artifacts/installer-qa/preserved.json
+            artifacts/installer-qa/setup-current/installer-manifest.json
+          retention-days: 30

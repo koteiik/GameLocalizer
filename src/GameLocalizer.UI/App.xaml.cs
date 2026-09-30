@@ -68,6 +68,8 @@ public partial class App : Application
             catch (Exception ex) { MessageBox.Show("Не удалось сохранить правки: " + ex.Message); }
         };
         window.Show();
+        try { InstalledUpdate.ConfirmStartup(e.Args); }
+        catch (Exception ex) { services.GetRequiredService<ILogger<App>>().LogWarning("Installer startup: {Type}", ex.GetType().Name); }
         try { if (UpdateHandoff.Startup(e.Args) is { } notice) vm.Updates.ShowUpdated(notice); }
         catch (Exception ex) { services.GetRequiredService<ILogger<App>>().LogWarning("Update startup: {Type}", ex.GetType().Name); }
         if (e.Args.Contains("--installer-updated") && new InstallationInfoService().GetInfo().Installed) vm.Updates.ShowInstallerUpdated();

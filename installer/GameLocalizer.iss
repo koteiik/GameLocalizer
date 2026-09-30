@@ -47,9 +47,10 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "Updater,Updater\*,update-manifest.json"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "update-manifest.json"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#InputDir}\install-files.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#InputDir}\installation.ini"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#InputDir}\installer-payload.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\{#DisplayName}\GameLocalizer"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"
@@ -58,7 +59,7 @@ Name: "{userdesktop}\{#DisplayName}"; Filename: "{app}\GameLocalizer.exe"; Worki
 
 [Run]
 Filename: "{app}\GameLocalizer.exe"; Description: "{cm:LaunchProgram,GameLocalizer}"; Flags: nowait postinstall skipifsilent; Check: not IsUpdate
-Filename: "{app}\GameLocalizer.exe"; Parameters: "--installer-updated"; Flags: nowait; Check: IsUpdate
+Filename: "{app}\GameLocalizer.exe"; Parameters: "--installer-updated"; Flags: nowait; Check: LaunchAfterUpdate
 
 [Code]
 var
@@ -73,6 +74,13 @@ var I: Integer;
 begin
   Result := False;
   for I := 1 to ParamCount do if CompareText(ParamStr(I), '/UPDATE') = 0 then Result := True;
+end;
+
+function LaunchAfterUpdate: Boolean;
+var I: Integer;
+begin
+  Result := IsUpdate;
+  for I := 1 to ParamCount do if CompareText(ParamStr(I), '/NOLAUNCH') = 0 then Result := False;
 end;
 
 function NormalPath(Value: String): String;
@@ -216,10 +224,13 @@ begin
 end;
 
 function InitializeUninstall: Boolean;
+var I: Integer;
 begin
   Result := not CheckForMutexes('Local\GameLocalizer-{#AppIdentity}');
   if not Result then begin SuppressibleMsgBox('Закройте GameLocalizer перед удалением.', mbError, MB_OK, IDOK); Exit; end;
   DeleteUserData := False;
+  { An explicit command-line consent is required for unattended data removal. }
+  for I := 1 to ParamCount do if CompareText(ParamStr(I), '/DELETEUSERDATA') = 0 then DeleteUserData := True;
   if not UninstallSilent then DeleteUserData := MsgBox('Удалить пользовательские данные и модели?' + #13#10 + UserDataPath + #13#10 + 'Память переводов, настройки и модели будут удалены. По умолчанию данные сохраняются.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
 end;
 

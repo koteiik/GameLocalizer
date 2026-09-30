@@ -19,10 +19,15 @@ public sealed class InstallerUpdateService : IInstallerUpdateService
         if (!UpdatePaths.Canonical(setup).Equals(UpdatePaths.Canonical(expected), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Недоверенный путь установщика.");
         UpdatePaths.NoLinks(setup); UpdatePaths.NoLinks(installation.Directory);
         await UpdatePackage.VerifyHashAsync(setup, release.Sha256!, ct);
-        // No shell command or URL can become an argument. Inno waits for the app mutex before changing files.
-        var start = new ProcessStartInfo(setup) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(setup)! };
-        foreach (var argument in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/UPDATE", "/DIR=" + installation.Directory,
-            "/LOG=" + Path.Combine(UpdateHandoff.Root, release.Tag, "setup.log") }) start.ArgumentList.Add(argument);
+        var id = Guid.NewGuid().ToString("N");
+        using var current = Process.GetCurrentProcess();
+        var request = new InstalledUpdateRequest(id, setup, installation.Directory, installation.Version, release, current.Id, current.StartTime.ToUniversalTime().Ticks);
+        var supervisor = new InstalledUpdate(UpdateHandoff.Root); supervisor.Validate(request);
+        var runner = Path.Combine(UpdateHandoff.Root, "InstalledRunner", id);
+        await Task.Run(() => UpdatePaths.CopyTree(Path.Combine(installation.Directory, "Updater"), runner, ct), ct);
+        supervisor.Save(new(request, "Prepared"));
+        var start = new ProcessStartInfo(Path.Combine(runner, "GameLocalizer.Updater.exe")) { UseShellExecute = false, WorkingDirectory = runner };
+        start.ArgumentList.Add("--installed-update"); start.ArgumentList.Add(supervisor.JournalPath(id));
         return start;
     }
     public void Launch(ProcessStartInfo start)

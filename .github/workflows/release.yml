@@ -5,7 +5,10 @@ on:
 permissions:
   contents: write
 jobs:
+  installer-validation:
+    uses: ./.github/workflows/installer-e2e.yml
   release:
+    needs: installer-validation
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,12 +25,31 @@ jobs:
       - run: dotnet build GameLocalizer.sln -c Release --no-restore
       - run: dotnet test GameLocalizer.sln -c Release --no-build
       - run: dotnet publish src/GameLocalizer.UI -c Release -r win-x64 --self-contained true -p:Version=${{ env.RELEASE_VERSION }} -o artifacts/publish
+      - name: Optional production Authenticode signing
+        shell: pwsh
+        env:
+          CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
+          CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
+        run: |
+          $files = @(Get-ChildItem artifacts/publish -Recurse -File | Where-Object { $_.Name -like 'GameLocalizer*' -and $_.Extension -in '.exe','.dll' } | ForEach-Object FullName)
+          ./scripts/Sign-Release.ps1 -Files $files
       - name: Package
         shell: pwsh
         run: |
           ./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version '${{ env.RELEASE_VERSION }}' -ZipPath artifacts/GameLocalizer-win-x64.zip
+          ./scripts/Build-Installer.ps1 -PublishDirectory artifacts/publish -OutputDirectory artifacts
+      - name: Sign Setup and finalize checksums
+        shell: pwsh
+        env:
+          CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
+          CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
+        run: |
+          ./scripts/Sign-Release.ps1 -Files artifacts/GameLocalizer-Setup.exe
+          ./scripts/Finalize-InstallerRelease.ps1 -Directory artifacts
+          $status = (Get-AuthenticodeSignature artifacts/GameLocalizer-Setup.exe).Status
+          "Installer signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Set-Content artifacts/release-notes.md
       - name: Create release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create '${{ github.ref_name }}' artifacts/GameLocalizer-win-x64.zip --title 'GameLocalizer ${{ github.ref_name }}' --generate-notes --verify-tag
+        run: gh release create '${{ github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --title 'GameLocalizer ${{ github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag

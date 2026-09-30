@@ -39,5 +39,5 @@ public sealed class InstallationInfoService(string? directory = null, Func<Insta
 
 public static class UninstallDataPolicy
 {
-    public static bool ShouldDelete(bool explicitConsent, bool silent) => explicitConsent && !silent;
+    public static bool ShouldDelete(bool explicitConsent, bool silent, bool explicitCommandLineConsent = false) => silent ? explicitCommandLineConsent : explicitConsent;
 }

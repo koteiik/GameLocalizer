@@ -110,4 +110,27 @@ public sealed class InstallerTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() => service.PrepareAsync(release, "file.exe", Info(), default));
         await Assert.ThrowsAsync<InvalidDataException>(() => service.PrepareAsync(release with { Tag = "v99.0.0" }, "file.exe", Info(installed: false), default));
     }
+    [Fact]
+    public void UnattendedDeleteRequiresItsOwnExplicitConsent()
+    {
+        Assert.False(UninstallDataPolicy.ShouldDelete(true, true));
+        Assert.True(UninstallDataPolicy.ShouldDelete(false, true, true));
+    }
+    [Fact]
+    public void RecoveryInventoryDetectsCorruptionAndPreservesUnknownFiles()
+    {
+        File.WriteAllText(Path.Combine(root, "unknown.txt"), "keep me");
+        var inventory = InstalledUpdate.Inventory(root);
+        InstalledUpdate.VerifyInventory(root, inventory);
+        Assert.Contains(inventory, f => f.Path == "unknown.txt");
+        File.WriteAllText(Path.Combine(root, "unknown.txt"), "changed");
+        Assert.Throws<InvalidDataException>(() => InstalledUpdate.VerifyInventory(root, inventory));
+    }
+    [Theory]
+    [InlineData("memory.db")][InlineData("settings.json")][InlineData("GameLocalizer_Backup")][InlineData("Models")]
+    public void RecoveryRefusesInstallationContainingUserData(string name)
+    {
+        File.WriteAllText(Path.Combine(root, name), "must not be modified");
+        Assert.Throws<InvalidDataException>(() => InstalledUpdate.Inventory(root));
+    }
 }

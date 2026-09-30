@@ -11,6 +11,13 @@ internal static class Program
     {
         try
         {
+            if (args.Length == 2 && args[0] is "--installed-update" or "--installed-recover")
+            {
+                var supervisor = new InstalledUpdate(UpdateHandoff.Root);
+                if (args[0] == "--installed-update") supervisor.ExecuteAsync(args[1], default).GetAwaiter().GetResult();
+                else { var pending = supervisor.Read(args[1]); supervisor.Recover(args[1]); InstalledUpdate.StartPrevious(pending.Request.Install); }
+                return;
+            }
             if (args.Length != 2 || args[0] is not ("--install" or "--recover")) throw new ArgumentException("Updater запускается через кнопку «Обновить» в GameLocalizer.");
             var installer = new UpdateInstaller(UpdateHandoff.Root, new UpdateProcesses(UpdateHandoff.Root));
             var request = installer.ReadRequest(args[1]);
