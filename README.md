@@ -2,7 +2,7 @@
 
 Open-source Windows application for creating Russian localizations for PC games.
 
-**Project is in early development.** Version 0.2.3 fixes BepInEx/XUnity key=value localization: only values reach the model; keys, formatting and comments remain unchanged. In-app GitHub updates retain SHA256 verification, installation backup and startup rollback. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
+**Project is in early development.** Version 0.3.0 adds a per-user Windows installer, installed-mode updates with verified startup and rollback, and explicit data-preserving uninstall. BepInEx/XUnity keys never reach the model and remain unchanged during Apply. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
 
 [Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
 
@@ -19,7 +19,9 @@ Open-source Windows application for creating Russian localizations for PC games.
 - Russian WPF interface, local logs, optional GitHub release checks.
 
 ## Installation
-Windows 10/11 x64. Once a release is published: **Releases → Latest → GameLocalizer-win-x64.zip**. Extract all files and run `GameLocalizer.exe`. The ZIP contains the .NET runtime; Visual Studio and a separate runtime installation are not required. This early build is unsigned.
+Windows 10/11 x64. **Releases → Latest → GameLocalizer-Setup.exe** installs for the current user without requesting administrator privileges. Portable users can download **GameLocalizer-win-x64.zip**, extract all files and run `GameLocalizer.exe`. Both contain the .NET runtime; Visual Studio and a separate runtime installation are not required. Current builds are **unsigned**; a production signing certificate is not configured. No SmartScreen/Defender bypass is recommended.
+
+Installed updates use the Setup asset; portable updates continue using the ZIP. Uninstall preserves `%LOCALAPPDATA%\GameLocalizer` by default; deleting models, memory and settings requires explicit consent. Game-folder backups are not uninstall targets. Each release includes `SHA256SUMS.txt` and a hashed installer payload inventory. See [Installer validation, signing and recovery](docs/INSTALLER-VALIDATION.md).
 
 From v0.2.2 onward, use **Обновить** in the update banner or **О программе**. Release notes, download progress and cancellation are available inside the application. Updates preserve the downloaded model, Translation Memory and game backups. Install v0.2.2 manually once when upgrading from earlier versions. Keep the complete `Updater/` folder beside the executable and use a writable installation directory outside the application's LocalAppData directory. See [Updating and recovery](docs/UPDATING.md) for verification, backup locations and interrupted-update recovery.
 

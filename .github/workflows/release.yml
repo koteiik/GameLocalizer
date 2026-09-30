@@ -48,8 +48,11 @@ jobs:
           ./scripts/Finalize-InstallerRelease.ps1 -Directory artifacts
           $status = (Get-AuthenticodeSignature artifacts/GameLocalizer-Setup.exe).Status
           "Installer signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Set-Content artifacts/release-notes.md
-      - name: Create release
+      - name: Test exact production installer in clean profile
+        shell: pwsh
+        run: ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup.exe -Version '${{ env.RELEASE_VERSION }}'
+      - name: Create draft pending local Defender verification
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create '${{ github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --title 'GameLocalizer ${{ github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag
+        run: gh release create '${{ github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --draft --title 'GameLocalizer ${{ github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag

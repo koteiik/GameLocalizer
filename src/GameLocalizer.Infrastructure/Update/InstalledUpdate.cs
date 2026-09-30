@@ -24,16 +24,15 @@ public sealed class InstalledUpdate(string root)
         if (new FileInfo(path).Length > 4 * 1024 * 1024) throw new InvalidDataException("Journal too large.");
         var journal = JsonSerializer.Deserialize<InstalledUpdateJournal>(File.ReadAllText(path)) ?? throw new InvalidDataException("Invalid journal.");
         if (!UpdatePaths.Canonical(path).Equals(UpdatePaths.Canonical(JournalPath(journal.Request.Id)), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Invalid journal path.");
-        Validate(journal.Request); return journal;
+        Validate(journal.Request, requireInstalled: false); return journal;
     }
-    public void Validate(InstalledUpdateRequest request)
+    public void Validate(InstalledUpdateRequest request, bool requireInstalled = true)
     {
         Id(request.Id); UpdatePaths.NoLinks(root); UpdatePaths.NoLinks(request.Install); UpdatePaths.NoLinks(request.Setup);
         if (UpdatePaths.Inside(root, request.Install) || UpdatePaths.Inside(request.Install, root) || UpdatePaths.Canonical(root).Equals(UpdatePaths.Canonical(request.Install), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Installation and recovery storage must be separate.");
         if (request.Release.Asset != ReleaseClient.InstallerAssetName || !request.Release.CanInstall || !ReleaseClient.IsNewer(request.Release, request.OldVersion) ||
             !UpdatePaths.Canonical(request.Setup).Equals(UpdatePaths.Canonical(Path.Combine(root, request.Release.Tag, ReleaseClient.InstallerAssetName)), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Invalid installer request.");
-        var actual = new InstallationInfoService(request.Install).GetInfo();
-        if (!actual.Installed) throw new InvalidDataException("Registered installation required.");
+        if (requireInstalled && !new InstallationInfoService(request.Install).GetInfo().Installed) throw new InvalidDataException("Registered installation required.");
     }
     public static IReadOnlyList<PackageFile> Inventory(string directory)
     {
@@ -103,6 +102,7 @@ public sealed class InstalledUpdate(string root)
     {
         var journal = Read(journalPath); var request = journal.Request;
         if (journal.Phase != "Prepared") throw new InvalidDataException("Use recovery for an interrupted transaction.");
+        Validate(request);
         await WaitForParent(request, ct);
         if (Mutex.TryOpenExisting(ApplicationPaths.AppMutex, out var running)) { running.Dispose(); throw new IOException("Close GameLocalizer before updating."); }
         await UpdatePackage.VerifyHashAsync(request.Setup, request.Release.Sha256!, ct);
@@ -137,13 +137,20 @@ public sealed class InstalledUpdate(string root)
         catch (Exception error)
         {
             Save(journal with { Error = error.GetType().Name + ": " + error.Message });
-            Recover(journalPath); StartPrevious(request.Install);
+            try { Recover(journalPath); StartPrevious(request.Install); }
+            catch (Exception recoveryError)
+            {
+                Save(journal with { Phase = "RollbackFailed", Error = error.Message + "; Recovery: " + recoveryError.Message });
+                throw;
+            }
         }
     }
     public void Recover(string journalPath)
     {
         var journal = Read(journalPath);
         if (journal.Phase is "Prepared" or "Complete" or "RolledBack" || journal.Files == null || journal.Registry == null) throw new InvalidDataException("No pending recovery.");
+        var location = journal.Registry.SingleOrDefault(v => v.Name == "InstallLocation")?.Value.GetString();
+        if (location == null || !UpdatePaths.Canonical(location).Equals(UpdatePaths.Canonical(journal.Request.Install), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Recovery registration does not match the installation.");
         if (Mutex.TryOpenExisting(ApplicationPaths.AppMutex, out var running)) { running.Dispose(); throw new IOException("Close GameLocalizer before recovery."); }
         VerifyInventory(Backup(journal.Request.Id), journal.Files);
         // Only installer-owned new files may be removed; unknown files and user data are never deleted.

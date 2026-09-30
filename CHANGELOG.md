@@ -6,6 +6,16 @@
 ### Changed
 ### Fixed
 
+## [0.3.0]
+
+### Added
+- Per-user Inno Setup installer, Start Menu entry, optional desktop shortcut and uninstall with data preservation by default.
+- Installed/portable mode detection and exact release asset selection.
+- Installed-update supervisor with SHA256 payload verification, durable backup/journal, startup acknowledgement, automatic failed-startup rollback and manual interrupted-update recovery.
+- Explicit unattended data-removal consent, stale owned-file cleanup and preservation of unknown installation files.
+- Reproducible payload inventory, Setup/ZIP checksums, future production Authenticode signing step and clean Windows VM lifecycle workflow.
+- Real installer tests with offline model inference and SQLite cache reuse; unsigned status remains explicit.
+
 ## [0.2.3]
 
 ### Fixed

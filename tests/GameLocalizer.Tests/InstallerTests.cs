@@ -133,4 +133,16 @@ public sealed class InstallerTests : IDisposable
         File.WriteAllText(Path.Combine(root, name), "must not be modified");
         Assert.Throws<InvalidDataException>(() => InstalledUpdate.Inventory(root));
     }
+    [Fact]
+    public void InterruptedJournalRemainsReadableWhenInstallationMetadataWasLost()
+    {
+        var updates = Path.Combine(root, "Updates");
+        var supervisor = new InstalledUpdate(updates);
+        var request = new InstalledUpdateRequest(Guid.NewGuid().ToString("N"), Path.Combine(updates, "v0.3.1", ReleaseClient.InstallerAssetName), Path.Combine(root, "Installation"), "0.3.0",
+            new("v0.3.1", "", 10, new string('a', 64), ReleaseClient.InstallerAssetName), 1, 1);
+        supervisor.Save(new(request, "Installing"));
+        Assert.Equal("Installing", supervisor.Read(supervisor.JournalPath(request.Id)).Phase);
+        Assert.Throws<InvalidDataException>(() => supervisor.Validate(request));
+        Assert.Throws<InvalidDataException>(() => supervisor.JournalPath("../escape"));
+    }
 }

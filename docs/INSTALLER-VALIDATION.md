@@ -2,6 +2,8 @@
 
 Stable v0.3.0 is blocked until actual installer lifecycle tests and Defender scanning pass. Unit tests alone do not satisfy this gate. `preview-v0.3.0` is not production validation.
 
+The release workflow additionally installs, hashes, starts and uninstalls the **exact production Setup asset** on its clean Windows runner. It creates a **draft** release only. Download that draft asset, verify `SHA256SUMS.txt`, scan those exact bytes locally with Defender, and publish the draft only after all evidence passes. This prevents a rebuild from silently invalidating an earlier scan.
+
 ## Repeatable lifecycle
 
 Run `scripts/Test-Installer.ps1 -Phase All` on a disposable Windows machine. The `Installer E2E` workflow runs the same script on a fresh GitHub-hosted Windows Server 2022 VM. This is separate from interactive Windows 11 testing; neither proves compatibility with every Windows configuration.
