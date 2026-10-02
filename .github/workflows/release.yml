@@ -2,23 +2,30 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag to package and publish
+        required: true
+        type: string
 permissions:
   contents: write
 jobs:
   installer-validation:
     uses: ./.github/workflows/installer-e2e.yml
   release:
-    needs: installer-validation
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
       - name: Validate version
         shell: pwsh
         run: |
-          $version = '${{ github.ref_name }}'.TrimStart('v')
+          $version = '${{ inputs.tag || github.ref_name }}'.TrimStart('v')
           if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Expected vX.Y.Z' }
           "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
       - run: dotnet restore GameLocalizer.sln
@@ -51,11 +58,35 @@ jobs:
           if (Test-Path -LiteralPath $notes) { Copy-Item -LiteralPath $notes -Destination artifacts/release-notes.md }
           else { "GameLocalizer v${{ env.RELEASE_VERSION }}" | Set-Content artifacts/release-notes.md }
           "`nInstaller signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Add-Content artifacts/release-notes.md
+      - name: Retain exact release assets for clean-profile validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-release-assets
+          path: |
+            artifacts/GameLocalizer-Setup.exe
+            artifacts/GameLocalizer-win-x64.zip
+            artifacts/SHA256SUMS.txt
+            artifacts/installer-manifest.json
+            artifacts/release-notes.md
+          retention-days: 30
+  production-installer-validation:
+    needs: [installer-validation, release]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: production-release-assets
+          path: artifacts
       - name: Test exact production installer in clean profile
         shell: pwsh
-        run: ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup.exe -Version '${{ env.RELEASE_VERSION }}'
+        run: |
+          $version = '${{ inputs.tag || github.ref_name }}'.TrimStart('v')
+          ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup.exe -Version $version
       - name: Create draft pending local Defender verification
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create '${{ github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --draft --title 'GameLocalizer ${{ github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag
+        run: gh release create '${{ inputs.tag || github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --draft --title 'GameLocalizer ${{ inputs.tag || github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag
