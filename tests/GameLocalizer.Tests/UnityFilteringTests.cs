@@ -113,7 +113,7 @@ public sealed class UnityFilteringTests : IDisposable
         Assert.Equal(12, managed + docs + runtime + normal.Technical);
         Assert.Equal(10, normal.Selected); Assert.Equal(11, normal.Rows.Count); // medium confidence visible; low hidden
         Assert.DoesNotContain(normal.Rows, r => r.Category == TextCategory.Technical);
-        Assert.Contains(normal.Rows, r => r.Category == TextCategory.Localization);
+        Assert.Contains(normal.Rows, r => r.Category is TextCategory.Localization or TextCategory.ShortUI);
         Assert.Contains(normal.Rows, r => r.Category == TextCategory.Dialogue);
         Assert.Contains(normal.Rows, r => r.Category == TextCategory.Subtitle);
         Assert.False(normal.Rows.Single(r => r.Original == "Lantern").Selected);

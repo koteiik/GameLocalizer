@@ -19,7 +19,7 @@ public sealed partial class ScanWorkspaceService
         {
             var rows = await repository.ReadRowsAsync(session, afterId, ct); if (rows.Count == 0) break;
             var cached = await translator.FindManyAsync(game, rows.Select(Item).ToArray(), ct);
-            var edits = rows.Where(r => r.Status != "Manual" && cached.ContainsKey(r.Id.ToString())).Select(r =>
+            var edits = rows.Where(r => r.Status != "Manual" && cached.ContainsKey(r.Id.ToString()) && (r.Status != "SourceChanged" || cached[r.Id.ToString()].Text != r.Translation)).Select(r =>
             {
                 var value = cached[r.Id.ToString()]; return new ScanEdit(r.Id, value.Text, r.Selected, value.Manual ? TranslationStatus.Manual : TranslationStatus.FromMemory);
             }).ToArray();

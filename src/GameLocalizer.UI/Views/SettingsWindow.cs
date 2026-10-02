@@ -46,6 +46,7 @@ public sealed class SettingsWindow : Window
         else providers.SelectionChanged += (_, _) => settings.TranslationProvider = providers.SelectedItem?.ToString() ?? "Mock";
         panel.Children.Add(new TextBlock { Text = "Модель загружается только при переводе. После Apply игра читает сохранённые файлы; GameLocalizer можно закрыть. Mock — только демонстрация.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 15, 0, 15) });
         if (glossary != null) { var button = new Button { Content = "Glossary / Names · импорт и экспорт CSV / JSON" }; button.Click += (_, _) => new GlossaryWindow(glossary) { Owner = this }.ShowDialog(); panel.Children.Add(button); }
+        var trace = new CheckBox { Content = "Diagnostic Apply Trace", IsChecked = settings.DiagnosticApplyTrace }; trace.Click += (_, _) => settings.DiagnosticApplyTrace = trace.IsChecked == true; panel.Children.Add(trace);
         var updates = new CheckBox { Content = "Проверять обновления при запуске", IsChecked = settings.CheckUpdatesOnStartup }; updates.Click += (_, _) => settings.CheckUpdatesOnStartup = updates.IsChecked == true; panel.Children.Add(updates);
         panel.Children.Add(new TextBlock { Text = "GitHub repository:" }); var repository = new TextBox { Text = settings.GitHubRepository }; panel.Children.Add(repository);
         var save = new Button { Content = "Сохранить и закрыть" }; panel.Children.Add(save);

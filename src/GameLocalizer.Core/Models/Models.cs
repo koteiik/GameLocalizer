@@ -10,6 +10,8 @@ public sealed class Game(string id, string name, string path, string platform, s
     public string Path { get; } = path;
     public string Platform { get; } = platform;
     public string? Library { get; } = library;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public double EngineConfidence { get; set; }
     private string engine = "Unknown", status = "Не анализирована";
     [System.Text.Json.Serialization.JsonIgnore]
     public string Engine { get => engine; set { engine = value; PropertyChanged?.Invoke(this, new(nameof(Engine))); } }
@@ -45,7 +47,15 @@ public record TranslationResult(IReadOnlyDictionary<string, string> Translations
 public record MemoryEntry(string SourceText, string TranslatedText, string SourceLanguage, string TargetLanguage,
     string GameId, string GameName, string FilePath, string Key, string Context, string SourceHash, string Provider,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string Category = "Possible", string TranslationModel = "", string TranslationModelVersion = "", string GlossaryVersion = "", DateTimeOffset? LastUsedAt = null, bool IsManual = false);
-public record FileChange(string RelativePath, string ExpectedHash, byte[] Content);
+public enum LocalizationApplyMode { CompatibleReplacement, SeparateTargetLocale }
+public record FileChange(string RelativePath, string ExpectedHash, byte[] Content)
+{
+    public LocalizationApplyMode ApplyMode { get; init; } = LocalizationApplyMode.CompatibleReplacement;
+    public List<string> SelectedEntryIds { get; init; } = [];
+    public Dictionary<string, string> EntryCategories { get; init; } = [];
+    public string AdapterType { get; init; } = "";
+    public string LocalizationSlot { get; init; } = "";
+}
 public record BackupEntry(string RelativePath, string OriginalHash, string AppliedHash, string ObjectName, DateTimeOffset CreatedAt);
 public class AppSettings
 {
@@ -53,6 +63,8 @@ public class AppSettings
     public string TranslationProvider { get; set; } = "Offline";
     public OfflineSettings Offline { get; set; } = new();
     public string TargetLanguage { get; set; } = "ru";
+    public LocalizationApplyMode ApplyMode { get; set; } = LocalizationApplyMode.CompatibleReplacement;
+    public bool DiagnosticApplyTrace { get; set; } = true;
     public bool CheckUpdatesOnStartup { get; set; } = true;
     public string GitHubRepository { get; set; } = "koteiik/GameLocalizer";
     public List<Game> ManualGames { get; set; } = [];

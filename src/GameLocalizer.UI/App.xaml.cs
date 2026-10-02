@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.IO;
 using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
@@ -32,9 +32,9 @@ public partial class App : Application
         collection.AddSingleton<IGameDiscoveryService, SteamDiscoveryService>();
         collection.AddSingleton<IEngineDetector, EngineDetector>();
         foreach (var adapter in new ILocalizationAdapter[] { new BepInExLocalizationAdapter(), new JsonLocalizationAdapter(), new XmlLocalizationAdapter(), new CsvLocalizationAdapter(), new CsvLocalizationAdapter('\t'), new IniLocalizationAdapter(), new PoLocalizationAdapter(), new PlainTextLocalizationAdapter() }) collection.AddSingleton(adapter);
-        collection.AddSingleton<ResourceScanner>(); collection.AddSingleton<BackupService>();
+        collection.AddSingleton<ResourceScanner>(); collection.AddSingleton(new BackupService(Microsoft.Extensions.Logging.Abstractions.NullLogger<BackupService>.Instance, Path.Combine(data, "games")));
         collection.AddSingleton<ScanPipeline>(); collection.AddSingleton<ScanWorkspaceService>();
-        collection.AddSingleton(new ScanResultRepository(Path.Combine(data, "scans", "scan-" + Guid.NewGuid().ToString("N") + ".db")));
+        collection.AddSingleton(new ScanResultRepository(Path.Combine(data, "analysis.db"), persistent: true));
         var settingsService = new SettingsService(data); var settings = settingsService.Load();
         collection.AddSingleton(settings); collection.AddSingleton(settings.Offline);
         collection.AddSingleton<ITranslationModelManager>(new TranslationModelManager(Path.Combine(data, "Models")));

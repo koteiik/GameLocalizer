@@ -1,7 +1,7 @@
 namespace GameLocalizer.Core.Models;
 
 public enum TranslationDevice { Auto, GPU, CPU }
-public enum TranslationStatus { NotTranslated, Queued, Translating, Translated, FromMemory, Manual, ValidationError, Cancelled, Failed }
+public enum TranslationStatus { NotTranslated, Queued, Translating, Translated, FromMemory, Manual, ValidationError, Cancelled, Failed, SourceChanged }
 public enum TranslationJobStatus { Pending, Running, Completed, PartiallyCompleted, Cancelled, Failed }
 public sealed class OfflineSettings
 {

@@ -7,15 +7,18 @@ using Microsoft.Extensions.Logging;
 
 namespace GameLocalizer.Infrastructure.FileSystem;
 
-public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizationAdapter> adapters, ILogger<ScanPipeline> logger)
+public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizationAdapter> adapters, ILogger<ScanPipeline> logger, ScanDiagnosticLog? diagnostics = null)
 {
+    public ScanDiagnosticLog DiagnosticLog { get; } = diagnostics ?? new();
+    public int ErrorCount { get; private set; }
     public const int BatchSize = 1000;
-    public async IAsyncEnumerable<ScanBatch> ScanAsync(string root, [EnumeratorCancellation] CancellationToken ct)
+    public async IAsyncEnumerable<ScanBatch> ScanAsync(string root, [EnumeratorCancellation] CancellationToken ct, IReadOnlyList<Resource>? resources = null)
     {
+        ErrorCount = 0;
         long files = 0, processed = 0, candidates = 0, skipped = 0, selected = 0;
         var detector = new TextCandidateDetector();
         // Enumeration/extraction is consumed on a worker by the UI; only one bounded file is parsed at once.
-        foreach (var resource in scanner.Enumerate(root, ct))
+        foreach (var resource in resources ?? scanner.Enumerate(root, ct))
         {
             ct.ThrowIfCancellationRequested(); files++;
             TextFile? snapshot = null; IReadOnlyList<TextEntry> entries = [];
@@ -30,7 +33,7 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
                     entries = adapter.Extract(snapshot.Text);
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException or FormatException or System.Text.Json.JsonException or System.Xml.XmlException or System.Text.DecoderFallbackException)
-                { skipped++; logger.LogWarning("Skipped scan resource {File}: {Type}", Path.GetFileName(resource.Path), e.GetType().Name); }
+                { skipped++; ErrorCount++; DiagnosticLog.Record(resource.Path, "Supported text scan / TextFiles.ReadAsync or adapter.Extract", e, "BOM-aware strict text decoding", "TextFiles.ReadAsync / adapter.Extract"); logger.LogWarning(e, "Skipped scan resource {File}", resource.Path); }
             }
             var frequencies = entries.GroupBy(e => e.Text).ToDictionary(g => g.Key, g => g.Count());
             var relative = Path.GetRelativePath(root, resource.Path);
@@ -46,9 +49,11 @@ public sealed class ScanPipeline(ResourceScanner scanner, IEnumerable<ILocalizat
                 {
                     candidates++;
                     var category = confidence < .35 ? TextCategory.Technical : ResourceClassifier.Category(scannedResource.Kind);
+                    if (ShortUiClassifier.IsCandidate(entry.Text, scannedResource.Kind, sourcePath, confidence)) category = TextCategory.ShortUI;
                     var autoSelected = ResourceClassifier.CanAutoSelect(confidence, category);
                     if (autoSelected) selected++;
-                    buffer.Add(new(relative, entry.Id, entry.Text, entry.Context, confidence, autoSelected, category));
+                    buffer.Add(new(relative, entry.Id, entry.Text, entry.Context, confidence, autoSelected, category) { PhysicalSourceFile = Path.GetFullPath(resource.Path),
+                        LocalizationSlot = ActiveLocalizationResolver.SlotFromPath(resource.Path), AdapterType = scannedResource.Format });
                 }
                 if (processed % BatchSize != 0) continue;
                 yield return new(scannedResource, snapshot?.Hash, buffer.ToArray(), new(files, candidates, processed, skipped, selected));

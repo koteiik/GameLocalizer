@@ -22,7 +22,9 @@ public sealed class TextCandidateDetector
         if (Regex.IsMatch(s, @"^(?:Direct3D\w*|Renderer|Vendor|VRAM|GfxDevice|MonoManager|ReloadAssembly|Initialized input|touch support|UnloadTime|FPS|driver info)(?:\b|:)", RegexOptions.IgnoreCase)) return .01;
         if (Regex.IsMatch(s, @"^(https?://|[A-Za-z]:\\)|[/\\].*[/\\]|^[\da-fA-F-]{32,36}$|\b\w+\.\w+\.\w+\b|^m_[A-Za-z]|\.(png|dds|wav|ogg|dll|exe|prefab|asset)$", RegexOptions.IgnoreCase)) return .02;
         if (Regex.IsMatch(s, @"^[\w]+_[\w]+$|^[a-z]+[A-Z]\w*$|^[A-Z][a-z]+[A-Z]\w*$|^[\w]+[/\\][\w/\\.]+$")) return .08;
-        if (s.Length > 3 && s.All(c => char.IsUpper(c) || c == '_' || char.IsDigit(c))) return .15;
+        if (s.Length > 3 && s.All(c => char.IsUpper(c) || c == '_' || char.IsDigit(c)) &&
+            !(ShortUiClassifier.HasVocabulary(s) && (source is ResourceKind.UIResource or ResourceKind.LocalizationCandidate || ShortUiClassifier.HasUiContext(path)))) return .15;
+        if (Regex.IsMatch(s, @"^(?:\{[^{}]*\}|%[a-z0-9]+|<[^>]+>|\[[^\]]*\])+$", RegexOptions.IgnoreCase)) return .02;
         var words = Regex.Matches(s, @"\p{L}+").Count;
         var score = words > 1 ? .78 : .52;
         if (char.IsUpper(s[0])) score += .10;
@@ -32,6 +34,13 @@ public sealed class TextCandidateDetector
         if (new[] { "Continue", "Play", "Settings", "Options", "Quit", "Exit", "Save", "Load", "Back", "Cancel", "Yes", "No", "Resume", "Inventory", "Map", "Help", "Start", "Attack", "Jump", "Run" }.Contains(s, StringComparer.OrdinalIgnoreCase)) score = Math.Max(score, .90);
         // Source evidence boosts natural text only; paths never rescue identifiers or diagnostics.
         if (source != ResourceKind.PossibleTextResource && score >= .6) score += .05;
+        if (!configurationContext && ShortUiClassifier.IsShortNatural(s) && score >= .35)
+        {
+            if (ShortUiClassifier.HasVocabulary(s) && (source is ResourceKind.UIResource or ResourceKind.LocalizationCandidate || ShortUiClassifier.HasUiContext(path))) score = Math.Max(score, .91);
+            else if (source == ResourceKind.LocalizationCandidate && score >= .6) score = Math.Max(score, .86);
+            if (ShortUiClassifier.HasUiContext(path)) score += .04;
+            if (path.Replace('\\', '/').Contains("/Translation/", StringComparison.OrdinalIgnoreCase)) score += .03;
+        }
         if (configurationContext) score -= .20;
         return Math.Clamp(score, 0, 1);
     }

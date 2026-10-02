@@ -7,6 +7,7 @@
 #define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\{" + AppIdentity + "}_is1"
 
 [Setup]
+SetupIconFile=..\src\GameLocalizer.UI\Assets\GameLocalizer.ico
 AppId={{{#AppIdentity}}
 AppName={#DisplayName}
 AppVersion={#AppVersion}
@@ -53,9 +54,9 @@ Source: "{#InputDir}\installation.ini"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#InputDir}\installer-payload.json"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{userprograms}\{#DisplayName}\GameLocalizer"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"
+Name: "{userprograms}\{#DisplayName}\GameLocalizer"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"; IconFilename: "{app}\GameLocalizer.exe"
 Name: "{userprograms}\{#DisplayName}\Uninstall GameLocalizer"; Filename: "{uninstallexe}"
-Name: "{userdesktop}\{#DisplayName}"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userdesktop}\{#DisplayName}"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"; IconFilename: "{app}\GameLocalizer.exe"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\GameLocalizer.exe"; Description: "{cm:LaunchProgram,GameLocalizer}"; Flags: nowait postinstall skipifsilent; Check: not IsUpdate

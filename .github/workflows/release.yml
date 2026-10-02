@@ -47,7 +47,10 @@ jobs:
           ./scripts/Sign-Release.ps1 -Files artifacts/GameLocalizer-Setup.exe
           ./scripts/Finalize-InstallerRelease.ps1 -Directory artifacts
           $status = (Get-AuthenticodeSignature artifacts/GameLocalizer-Setup.exe).Status
-          "Installer signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Set-Content artifacts/release-notes.md
+          $notes = 'docs/RELEASE-${{ env.RELEASE_VERSION }}.md'
+          if (Test-Path -LiteralPath $notes) { Copy-Item -LiteralPath $notes -Destination artifacts/release-notes.md }
+          else { "GameLocalizer v${{ env.RELEASE_VERSION }}" | Set-Content artifacts/release-notes.md }
+          "`nInstaller signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Add-Content artifacts/release-notes.md
       - name: Test exact production installer in clean profile
         shell: pwsh
         run: ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup.exe -Version '${{ env.RELEASE_VERSION }}'

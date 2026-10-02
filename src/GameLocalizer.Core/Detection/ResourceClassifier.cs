@@ -18,7 +18,7 @@ public sealed class ResourceClassifier
     public static bool IsConfiguration(string path) => Path.GetExtension(path).ToLowerInvariant() is ".ini" or ".cfg" or ".config";
     public static bool HasLocalizationDirectory(string path) => Parts(path).SkipLast(1).Any(LocalizationDirectories.Contains);
     public static bool CanAutoSelect(double confidence, TextCategory category) => confidence >= .85 &&
-        category is TextCategory.UI or TextCategory.Dialogue or TextCategory.Subtitle or TextCategory.Localization or TextCategory.Quest or TextCategory.Item or TextCategory.Story;
+        category is TextCategory.ShortUI or TextCategory.UI or TextCategory.Dialogue or TextCategory.Subtitle or TextCategory.Localization or TextCategory.Quest or TextCategory.Item or TextCategory.Story;
     private static string[] Parts(string path) => path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
     private static bool Has(string[] parts, params string[] names) => parts.Any(p => names.Contains(Path.GetFileNameWithoutExtension(p), StringComparer.OrdinalIgnoreCase));
     public static bool IsRuntimePath(string path)
@@ -51,7 +51,7 @@ public sealed class ResourceClassifier
         if (ext == ".log" || name is "output_log.txt" or "debug.txt" or "crash.txt" or "error_log.txt" || name.EndsWith("_log.txt") || Has(parts, "logs")) return ResourceKind.LogFile;
         if (ext is ".pdb" or ".meta" or ".manifest" or ".asmdef" or ".asmref" || name.EndsWith(".deps.json") || name.EndsWith(".runtimeconfig.json") ||
             name is "package.json" or "package-lock.json" or "packages-lock.json" || name == "manifest.json" && Has(parts, "Packages") || Has(parts, "PackageCache")) return ResourceKind.AssemblyMetadata;
-        if (ext is ".exe" or ".dll" or ".pak" or ".pck" or ".asset" or ".bundle" or ".png" or ".dds" or ".wav" or ".ogg") return ResourceKind.Binary;
+        if (ext is ".exe" or ".dll" or ".pak" or ".pck" or ".asset" or ".assets" or ".bundle" or ".png" or ".dds" or ".wav" or ".ogg") return ResourceKind.Binary;
         if (modLocalization) return ResourceKind.LocalizationCandidate;
         if (Localization.BepInExLocalizationAdapter.TranslationPath(path)) return ResourceKind.LocalizationCandidate;
         if (HasLocalizationDirectory(path) && name == "config.ini") return ResourceKind.LocalizationCandidate;

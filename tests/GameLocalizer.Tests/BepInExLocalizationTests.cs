@@ -145,6 +145,7 @@ public sealed class BepInExLocalizationTests : IDisposable
         var rows = await workspace.GetTestRowsAsync("scan", default); Assert.Equal(5, rows.Count);
         Assert.Equal(new[] { "ありがとう", "NoName", "FK関節", "BGM", "ありがとう" }, rows.Select(r => r.DisplayKey));
         Assert.All(rows, r => { Assert.True(r.Selected); Assert.DoesNotContain('=', r.Original); });
+        Assert.All(rows, r => { Assert.Equal(path, r.PhysicalSourceFile); Assert.Equal("en", r.LocalizationSlot); Assert.Equal(adapter.Name, r.AdapterType); });
         var job = await workspace.RunTranslationJobAsync(game, "scan", false, true, null, default);
         Assert.Equal(TranslationJobStatus.Completed, job.Status); Assert.Equal(original, await File.ReadAllBytesAsync(path));
         var sent = spy.Requests.SelectMany(r => r.Batch.Items).ToArray(); Assert.Equal(4, sent.Length);
