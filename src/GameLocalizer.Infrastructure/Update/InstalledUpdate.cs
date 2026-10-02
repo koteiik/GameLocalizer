@@ -30,8 +30,8 @@ public sealed class InstalledUpdate(string root)
     {
         Id(request.Id); UpdatePaths.NoLinks(root); UpdatePaths.NoLinks(request.Install); UpdatePaths.NoLinks(request.Setup);
         if (UpdatePaths.Inside(root, request.Install) || UpdatePaths.Inside(request.Install, root) || UpdatePaths.Canonical(root).Equals(UpdatePaths.Canonical(request.Install), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Installation and recovery storage must be separate.");
-        if (request.Release.Asset != ReleaseClient.InstallerAssetName || !request.Release.CanInstall || !ReleaseClient.IsNewer(request.Release, request.OldVersion) ||
-            !UpdatePaths.Canonical(request.Setup).Equals(UpdatePaths.Canonical(Path.Combine(root, request.Release.Tag, ReleaseClient.InstallerAssetName)), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Invalid installer request.");
+        if (!ReleaseClient.IsInstallerAsset(request.Release.Asset) || !request.Release.CanInstall || !ReleaseClient.IsNewer(request.Release, request.OldVersion) ||
+            !UpdatePaths.Canonical(request.Setup).Equals(UpdatePaths.Canonical(Path.Combine(root, request.Release.Tag, request.Release.Asset)), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Invalid installer request.");
         if (requireInstalled && !new InstallationInfoService(request.Install).GetInfo().Installed) throw new InvalidDataException("Registered installation required.");
     }
     public static IReadOnlyList<PackageFile> Inventory(string directory)
@@ -117,7 +117,7 @@ public sealed class InstalledUpdate(string root)
             foreach (var arg in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/SP-", "/UPDATE", "/NOLAUNCH", "/DIR=" + request.Install, "/LOG=" + Path.Combine(root, request.Release.Tag, "setup.log") }) start.ArgumentList.Add(arg);
             using (var setup = Process.Start(start) ?? throw new IOException("Installer failed to start."))
             { await setup.WaitForExitAsync(ct); if (setup.ExitCode != 0) throw new IOException("Installer exit code: " + setup.ExitCode); }
-            var manifest = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(Path.Combine(request.Install, "installer-payload.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Payload manifest missing.");
+            var manifest = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(DistributionPaths.Metadata(request.Install, "installer-payload.json")), new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Payload manifest missing.");
             if (manifest.Version != request.Release.Version.ToString()) throw new InvalidDataException("Installed version mismatch.");
             VerifyInventory(request.Install, manifest.Files);
             Save(journal = journal with { Phase = "Starting" });
@@ -154,7 +154,7 @@ public sealed class InstalledUpdate(string root)
         if (Mutex.TryOpenExisting(ApplicationPaths.AppMutex, out var running)) { running.Dispose(); throw new IOException("Close GameLocalizer before recovery."); }
         VerifyInventory(Backup(journal.Request.Id), journal.Files);
         // Only installer-owned new files may be removed; unknown files and user data are never deleted.
-        var ownedList = Path.Combine(journal.Request.Install, "install-files.txt");
+        var ownedList = DistributionPaths.Metadata(journal.Request.Install, "install-files.txt");
         var owned = File.Exists(ownedList) ? File.ReadAllLines(ownedList) : [];
         var previous = journal.Files.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var name in owned)
@@ -176,7 +176,7 @@ public sealed class InstalledUpdate(string root)
         var supervisor = new InstalledUpdate(UpdateHandoff.Root); var id = Id(args[position + 1]);
         var journal = supervisor.Read(supervisor.JournalPath(id));
         if (journal.Phase != "Starting" || journal.Request.Release.Version.ToString() != ApplicationVersion.Current.ToString() ||
-            !UpdatePaths.Canonical(AppContext.BaseDirectory).Equals(UpdatePaths.Canonical(journal.Request.Install), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unexpected startup confirmation.");
+            !UpdatePaths.Canonical(GameLocalizer.Core.Models.ApplicationPaths.InstallDirectory).Equals(UpdatePaths.Canonical(journal.Request.Install), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unexpected startup confirmation.");
         UpdatePaths.NoLinks(supervisor.Ready(id)); File.WriteAllText(supervisor.Ready(id), id);
     }
 }

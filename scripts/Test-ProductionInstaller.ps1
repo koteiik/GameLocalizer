@@ -8,7 +8,7 @@ $setupPath = (Resolve-Path -LiteralPath $Setup).Path
 $process = Start-Process -FilePath $setupPath -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/SP-','/NORESTART' -PassThru -Wait -WindowStyle Hidden
 if ($process.ExitCode -ne 0) { throw 'Production installation failed' }
 if ((Get-ItemProperty -LiteralPath $registration).DisplayVersion -ne $Version) { throw 'Production registration version mismatch' }
-$manifest = Get-Content -LiteralPath (Join-Path $install 'installer-payload.json') -Raw | ConvertFrom-Json
+$manifest = Get-Content -LiteralPath (Join-Path $install 'app/installer-payload.json') -Raw | ConvertFrom-Json
 if ($manifest.Version -ne $Version) { throw 'Production payload version mismatch' }
 foreach ($file in $manifest.Files) {
     $target = [IO.Path]::GetFullPath((Join-Path $install $file.Path))
@@ -20,7 +20,7 @@ Start-Sleep -Seconds 5
 if ($app.HasExited) { throw 'Production app exited during startup' }
 if ($app.MainWindowHandle -eq 0) { $app.Refresh(); if ($app.MainWindowHandle -eq 0) { throw 'Production WPF window did not open' } }
 $app.Kill(); $app.WaitForExit()
-$uninstall = Start-Process -FilePath (Join-Path $install 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait -WindowStyle Hidden
+$uninstall = Start-Process -FilePath (Join-Path $install 'app/unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -PassThru -Wait -WindowStyle Hidden
 if ($uninstall.ExitCode -ne 0) { throw 'Production uninstall failed' }
 Start-Sleep -Seconds 2
 if ((Test-Path -LiteralPath (Join-Path $install 'GameLocalizer.exe')) -or (Test-Path -LiteralPath $registration)) { throw 'Production installation remains' }

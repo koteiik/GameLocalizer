@@ -12,4 +12,4 @@ Restore сохраняет manifest и backup. Cleanup восстанавлив�
 
 `SeparateTargetLocale` оставлен в enum для будущего расширенного режима; попытка применения этого режима пока отклоняется. Шрифты не изменяются: выводится только предупреждение о возможном отсутствии кириллицы.
 
-Регрессии: CompatibleModeTests, BepInExLocalizationTests, CleanupTests. Локальная сборка, тесты, publish и установка выполняются через `dev-install.ps1`; публичная версия и GitHub-публикации не меняются.
+Регрессии: CompatibleModeTests, BepInExLocalizationTests, CleanupTests. Локальная сборка, тесты, publish и установка выполняются через `scripts/dev-install.ps1`; публичная версия и GitHub-публикации не меняются.

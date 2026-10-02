@@ -13,10 +13,10 @@ public sealed class InstallationInfoService(string? directory = null, Func<Insta
     public static string RegistryPath => @"Software\Microsoft\Windows\CurrentVersion\Uninstall\{" + ApplicationPaths.AppId + "}_is1";
     public InstallationInfo GetInfo()
     {
-        var path = UpdatePaths.Canonical(directory ?? AppContext.BaseDirectory);
+        var path = UpdatePaths.Canonical(directory ?? ApplicationPaths.InstallDirectory);
         var record = (registration ?? ReadRegistration)();
         var installed = record != null && UpdatePaths.Canonical(record.Directory).Equals(path, StringComparison.OrdinalIgnoreCase) &&
-            File.Exists(Path.Combine(path, "unins000.exe")) && File.Exists(Path.Combine(path, "installation.ini"));
+            File.Exists(DistributionPaths.Metadata(path, "unins000.exe")) && File.Exists(DistributionPaths.Metadata(path, "installation.ini"));
         var writable = false;
         try
         {

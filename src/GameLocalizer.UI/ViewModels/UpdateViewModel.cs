@@ -33,7 +33,7 @@ public sealed class UpdateViewModel : Observable
     public double Progress { get => progress; private set => Set(ref progress, value); }
     public bool HandoffStarted { get; private set; }
     public bool HasNewVersion => release != null && ReleaseClient.IsNewer(release, CurrentVersion);
-    public bool CanUpdate => HasNewVersion && release!.CanInstall && (!installation.Installed || installation.Writable && release.Asset == ReleaseClient.InstallerAssetName) && !UpdateInstaller.IsOperationBlocked(operationBusy(), false, Busy);
+    public bool CanUpdate => HasNewVersion && release!.CanInstall && (!installation.Installed || installation.Writable && ReleaseClient.IsInstallerAsset(release.Asset)) && !UpdateInstaller.IsOperationBlocked(operationBusy(), false, Busy);
     public string BlockReason => operationBusy() ? "Завершите текущую операцию перед обновлением." : installation.Installed && !installation.Writable ? "Папка установки недоступна для записи." : release is { CanInstall: false } ? "Нет доверенного SHA256 / пакета Windows. Доступна ручная загрузка." : "";
     public ICommand CheckCommand { get; }
     public ICommand UpdateCommand { get; }

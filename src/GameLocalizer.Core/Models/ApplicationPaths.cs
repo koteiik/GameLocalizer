@@ -9,4 +9,5 @@ public static class ApplicationPaths
     public static string DataDirectoryName => Metadata("UserDataDirectoryName");
     public static string UserData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DataDirectoryName);
     public static string AppMutex => @"Local\GameLocalizer-" + AppId;
+    public static string InstallDirectory => DistributionPaths.InstallRoot(AppContext.BaseDirectory);
 }

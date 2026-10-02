@@ -22,5 +22,5 @@ No recursive deletion is used for game cleanup. Linked paths and traversal are r
 
 Translation memory, models, settings and jobs under LOCALAPPDATA are not accessed by
 cleanup. A new scan continues to reuse translation memory. Installation and publication
-use `dev-install.ps1`; local outputs are under `artifacts/dev`. No public version bump,
+use `scripts/dev-install.ps1`; local outputs are under `artifacts/dev`. No public version bump,
 GitHub Release, tags or release uploads are part of this workflow.

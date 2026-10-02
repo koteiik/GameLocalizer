@@ -81,7 +81,7 @@ Mock remains a demonstration dictionary (`[ДЕМО]` for unknown phrases), not 
 Heuristic text selection can miss text or include configuration strings. Review every selected row. **Scan limits and display limits are separate:** scanning has no aggregate row limit; parsing retains a 4 MiB per-file safety limit and directory depth 24. The UI holds at most 2,000 preview rows and 2,000 prioritized catalog entries. The full scan result is queried from a per-process SQLite cache under `%LOCALAPPDATA%/GameLocalizer/scans`, removed on normal exit; scan previews are temporary, not a saved project. Translation memory and backups remain persistent. A crash can leave an unused scan cache. Logs, binaries and known technical files are listed but not extracted. Managed/Mono/IL2CPP/assembly/metadata directories and Unity *_Data Plugins/Native directories are pruned; the catalog shows excluded directory roots, not their contents. XML beside assemblies and XML with doc/members/member API structure are excluded. Games storing real dialogue in excluded directories need a future specialized adapter. Heuristics cannot prove a string is player-visible. CSV assumes a header and ID column. This is not a universal game localizer. No OCR, overlay, engine binary adapters, installer or automatic update installation. Repository links and optional update checks use `koteiik/GameLocalizer` by default; forks can change this in Settings.
 
 ## Roadmap
-See [ROADMAP.md](ROADMAP.md). The roadmap is guidance, not a commitment.
+See [Roadmap](docs/project/ROADMAP.md). The roadmap is guidance, not a commitment.
 
 ## Building From Source
 Install the .NET 8 SDK on Windows; Visual Studio is optional.
@@ -91,10 +91,12 @@ dotnet restore GameLocalizer.sln
 dotnet build GameLocalizer.sln -c Release --no-restore
 dotnet test GameLocalizer.sln -c Release --no-build
 dotnet publish src/GameLocalizer.UI -c Release -r win-x64 --self-contained true -o artifacts/publish
-./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version 0.2.3 -ZipPath artifacts/GameLocalizer-win-x64.zip
+./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version 0.2.3 -ZipPath artifacts/GameLocalizer-Portable-x64.zip
 ```
 
 GitHub Actions builds/tests on pushes and pull requests. Pushing a `v*` tag also publishes a self-contained win-x64 ZIP and creates a GitHub Release only after tests pass.
 
 ## Contributing
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). MIT licensed. Submit only artificial test fixtures, never game assets, credentials or personal databases.
+Read [Contributing](docs/development/CONTRIBUTING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). MIT licensed. Submit only artificial test fixtures, never game assets, credentials or personal databases.
+
+Internal files now live under `app/`. See [distribution layout and migration](docs/INSTALLATION-LAYOUT.md) and [development instructions](docs/development/AGENTS.md). Future release asset names are documented there; v0.5.0 assets retain their original names.

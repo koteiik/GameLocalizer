@@ -148,12 +148,32 @@ public sealed class UpdateTests : IDisposable
         Assert.Null(UpdateHandoff.ConsumeNotification(Updates, Install, "v0.2.2"));
     }
     [Fact]
+    public async Task FlatMigrationDeletesOnlyUnchangedManifestOwnedFilesAndRollbackRetainsThem()
+    {
+        var request = Request();
+        byte[] original = Encoding.UTF8.GetBytes("owned native fixture");
+        File.WriteAllBytes(Path.Combine(Install, "obsolete.dll"), original);
+        Directory.CreateDirectory(Path.Combine(Install, "ru"));
+        File.WriteAllBytes(Path.Combine(Install, "ru", "legacy.resources.dll"), original);
+        File.WriteAllText(Path.Combine(Install, "edited.dll"), "user edited");
+        var old = new PackageManifest("0.2.1", [new("obsolete.dll", original.Length, Hash(original)), new("ru/legacy.resources.dll", original.Length, Hash(original)), new("edited.dll", original.Length, Hash(original))]);
+        File.WriteAllText(Path.Combine(Install, UpdatePackage.LegacyManifestName), JsonSerializer.Serialize(old));
+        var installer = new UpdateInstaller(Updates, new Processes());
+        await installer.InstallAsync(request, default);
+        Assert.False(File.Exists(Path.Combine(Install, "obsolete.dll")));
+        Assert.False(Directory.Exists(Path.Combine(Install, "ru")));
+        Assert.False(File.Exists(Path.Combine(Install, UpdatePackage.LegacyManifestName)));
+        Assert.Equal("user edited", File.ReadAllText(Path.Combine(Install, "edited.dll")));
+        Assert.Equal(original, File.ReadAllBytes(Path.Combine(installer.PreviousPath(request), "obsolete.dll")));
+        Assert.True(File.Exists(Path.Combine(Install, "app", "GameLocalizer.ModelHost.exe")));
+    }
+    [Fact]
     public async Task FailedStartupRollsBackCompleteInstallation()
     {
         var request = Request(); var processes = new Processes(false); var installer = new UpdateInstaller(Updates, processes);
         await Assert.ThrowsAsync<IOException>(() => installer.InstallAsync(request, default));
         Assert.Equal("original exe", File.ReadAllText(Path.Combine(Install, "GameLocalizer.exe"))); Assert.Equal(1, processes.Rollbacks);
-        Assert.False(File.Exists(Path.Combine(Install, "GameLocalizer.ModelHost.exe")));
+        Assert.False(File.Exists(Path.Combine(Install, "app", "GameLocalizer.ModelHost.exe")));
         Assert.True(File.Exists(Path.Combine(installer.BackupPath(request), "GameLocalizer.exe")));
         Assert.Null(UpdateHandoff.ConsumeNotification(Updates, Install, "v0.2.2"));
     }
@@ -169,7 +189,7 @@ public sealed class UpdateTests : IDisposable
         Assert.Equal("keep this", File.ReadAllText(Path.Combine(Install, "portable-user-file.txt")));
     }
     [Theory]
-    [InlineData("../escaped.exe")][InlineData("/escaped.exe")][InlineData("C:/escaped.exe")][InlineData("sub/../../escaped.exe")][InlineData("sub\\evil.exe")][InlineData("file:stream")][InlineData("CON.txt")][InlineData("Models/model.onnx")][InlineData("memory.db")][InlineData("GameLocalizer_Backup/old.txt")][InlineData("gamelocalizer.EXE")]
+    [InlineData("../escaped.exe")][InlineData("/escaped.exe")][InlineData("C:/escaped.exe")][InlineData("sub/../../escaped.exe")][InlineData("sub\\evil.exe")][InlineData("file:stream")][InlineData("CON.txt")][InlineData("Models/model.onnx")][InlineData("memory.db")][InlineData("analysis.db")][InlineData("RuntimeDictionary/entry.json")][InlineData("GameLocalizer_Backup/old.txt")][InlineData("gamelocalizer.EXE")]
     public async Task UnsafeZipRejectedBeforeInstallationChanges(string extra)
     {
         var request = Request(Package(extra: extra)); var installer = new UpdateInstaller(Updates, new Processes());
@@ -180,6 +200,18 @@ public sealed class UpdateTests : IDisposable
     public async Task MissingExecutableRejected()
     {
         var request = Request(Package(omit: "GameLocalizer.exe"));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new UpdateInstaller(Updates, new Processes()).InstallAsync(request, default));
+        Assert.Equal("original exe", File.ReadAllText(Path.Combine(Install, "GameLocalizer.exe")));
+    }
+    [Theory]
+    [InlineData("app/GameLocalizer.ModelHost.exe")]
+    [InlineData("app/e_sqlite3.dll")]
+    [InlineData("app/onnxruntime.dll")]
+    [InlineData("app/RuntimeCollector/GameLocalizer.RuntimeCollector.dll")]
+    [InlineData("app/Updater/GameLocalizer.Updater.exe")]
+    public async Task MissingInternalDependencyRejectedBeforeReplacingInstallation(string name)
+    {
+        var request = Request(Package(omit: name));
         await Assert.ThrowsAsync<InvalidDataException>(() => new UpdateInstaller(Updates, new Processes()).InstallAsync(request, default));
         Assert.Equal("original exe", File.ReadAllText(Path.Combine(Install, "GameLocalizer.exe")));
     }

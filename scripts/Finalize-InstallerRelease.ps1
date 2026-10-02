@@ -3,11 +3,11 @@ $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath $Directory).Path
 $manifestPath = Join-Path $root 'installer-manifest.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-$setup = Join-Path $root 'GameLocalizer-Setup.exe'
+$setup = Join-Path $root 'GameLocalizer-Setup-x64.exe'
 $manifest.SetupSha256 = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash
 $manifest.Signed = (Get-AuthenticodeSignature -LiteralPath $setup).Status.ToString()
 [IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
-$lines = @('GameLocalizer-Setup.exe','GameLocalizer-win-x64.zip','installer-manifest.json' | ForEach-Object {
+$lines = @('GameLocalizer-Setup-x64.exe','GameLocalizer-Portable-x64.zip' | ForEach-Object {
     $hash = (Get-FileHash -LiteralPath (Join-Path $root $_) -Algorithm SHA256).Hash.ToLowerInvariant()
     "$hash  $_"
 })

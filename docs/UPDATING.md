@@ -6,7 +6,7 @@ Install v0.2.2 manually once if upgrading from v0.2.1 or earlier: those versions
 
 ## Download and validation
 
-Only `GameLocalizer-win-x64.zip` is selected. The release must have a stable canonical `vX.Y.Z` tag and be newer than the running version. Drafts and prereleases are ignored. The remote asset URL must match the official repository exactly; only HTTPS is allowed. GitHub's signed `release-assets.githubusercontent.com/github-production-release-asset/` delivery redirect is explicitly allowed. No arbitrary CDN or update feed is accepted.
+Portable updates select `GameLocalizer-Portable-x64.zip` (legacy `GameLocalizer-win-x64.zip` is also accepted); installed updates select `GameLocalizer-Setup-x64.exe` or the legacy installer name. The release must have a stable canonical `vX.Y.Z` tag and be newer than the running version. Drafts and prereleases are ignored. The remote asset URL must match the official repository exactly; only HTTPS is allowed. GitHub's signed `release-assets.githubusercontent.com/github-production-release-asset/` delivery redirect is explicitly allowed. No arbitrary CDN or update feed is accepted.
 
 The ZIP is streamed into `%LOCALAPPDATA%/GameLocalizer/Updates/vX.Y.Z/`, with progress in MB and cancellation. Its size and SHA256 must match the GitHub API asset digest. Missing digest blocks installation. Failed/cancelled downloads remove their partial file. The installer rechecks the digest using the same locked file handle used for extraction.
 
@@ -39,7 +39,9 @@ The installer rejects overlap between its installation and `%LOCALAPPDATA%/GameL
 
 ```powershell
 dotnet publish src/GameLocalizer.UI -c Release -r win-x64 --self-contained true -o artifacts/publish
-./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version 0.2.2 -ZipPath artifacts/GameLocalizer-win-x64.zip
+./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version 0.2.2 -ZipPath artifacts/GameLocalizer-Portable-x64.zip
 ```
 
 The publish target includes the model host and self-contained updater. The packaging script adds documentation, creates the per-file manifest and ZIP. GitHub's release workflow uses the same script. The API supplies the final ZIP digest after upload.
+
+See [distribution layout and migration](INSTALLATION-LAYOUT.md) for internal paths and the one-time manual transition required by already published clients.

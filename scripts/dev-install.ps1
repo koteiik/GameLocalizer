@@ -1,7 +1,7 @@
 param([string]$Dotnet = 'dotnet', [switch]$Launch)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$root = $PSScriptRoot
+$root = Split-Path $PSScriptRoot -Parent
 if ($Dotnet -eq 'dotnet' -and (Test-Path -LiteralPath "$env:LOCALAPPDATA\GameLocalizerTools\dotnet\dotnet.exe")) {
     $Dotnet = "$env:LOCALAPPDATA\GameLocalizerTools\dotnet\dotnet.exe"
 }
@@ -48,7 +48,7 @@ function Verify-InstalledBinaries {
     Write-Output "Installed EXE last write: $((Get-Item -LiteralPath $installedExe).LastWriteTimeUtc.ToString('O'))"
     if ($sourceHash -ne $installedHash) { throw 'FAIL: installed executable SHA256 mismatch; launch blocked.' }
     $proof = @()
-    foreach ($relative in @('GameLocalizer.exe','GameLocalizer.dll','GameLocalizer.Core.dll','GameLocalizer.Infrastructure.dll')) {
+    foreach ($relative in @('GameLocalizer.exe','app\GameLocalizer.dll','app\GameLocalizer.Core.dll','app\GameLocalizer.Infrastructure.dll')) {
         $source = Get-Item -LiteralPath (Owned-Path $publish $relative)
         $installed = Get-Item -LiteralPath (Owned-Path $target $relative)
         $sourceBinaryHash = (Get-FileHash -LiteralPath $source.FullName -Algorithm SHA256).Hash
@@ -104,20 +104,21 @@ try {
     Run-Dotnet @('build','GameLocalizer.sln','-c','Release')
     Run-Dotnet @('test','GameLocalizer.sln','-c','Release','--no-build','--logger','trx','--results-directory',"${publish}-test-results")
     Run-Dotnet @('publish','src/GameLocalizer.UI','-c','Release','-r','win-x64','--self-contained','true','-o',$publish)
-    foreach ($required in @('GameLocalizer.exe','GameLocalizer.ModelHost.exe','Updater\GameLocalizer.Updater.exe','coreclr.dll')) {
+    foreach ($required in @('GameLocalizer.exe','app\GameLocalizer.ModelHost.exe','app\Updater\GameLocalizer.Updater.exe','app\coreclr.dll')) {
         if (!(Test-Path -LiteralPath (Join-Path $publish $required))) { throw "Publish missing $required" }
     }
-    Copy-Item -LiteralPath (Join-Path $root 'README.md'),(Join-Path $root 'LICENSE'),(Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $publish
+    & (Join-Path $PSScriptRoot 'Package.ps1') -PublishDirectory $publish -Version ((Get-Item (Join-Path $publish 'GameLocalizer.exe')).VersionInfo.ProductVersion.Split('+')[0])
     $newFiles = @(Get-ChildItem -LiteralPath $publish -Recurse -File | ForEach-Object { $_.FullName.Substring($publish.Length + 1) })
-    $manifestName = 'dev-install-files.txt'
+    $manifestName = 'app\dev-install-files.txt'
     $oldManifest = Join-Path $target $manifestName
-    if (!(Test-Path -LiteralPath $oldManifest)) { $oldManifest = Join-Path $target 'install-files.txt' }
+    foreach ($candidate in @('dev-install-files.txt','app\install-files.txt','install-files.txt')) { if (!(Test-Path -LiteralPath $oldManifest)) { $oldManifest = Join-Path $target $candidate } }
     if ((Test-Path -LiteralPath $target) -and !(Test-Path -LiteralPath $oldManifest)) { throw 'Existing install requires an application file manifest.' }
     $oldFiles = @()
     if (Test-Path -LiteralPath $oldManifest) {
-        $null = Owned-Path $target (Split-Path $oldManifest -Leaf)
-        $oldFiles = @(Get-Content -LiteralPath $oldManifest | Where-Object { $_ -notin @('install-files.txt','installation.ini','installer-payload.json') })
+        $null = Owned-Path $target ($oldManifest.Substring($target.Length + 1))
+        $oldFiles = @(Get-Content -LiteralPath $oldManifest | Where-Object { (Split-Path $_ -Leaf) -notin @('install-files.txt','installation.ini','installer-payload.json') })
     }
+    if ((Test-Path -LiteralPath $oldManifest) -and (Split-Path $oldManifest -Leaf) -eq 'dev-install-files.txt') { $oldFiles += $oldManifest.Substring($target.Length + 1) }
     $allFiles = @(@($newFiles) + @($oldFiles) + @($manifestName) | Sort-Object -Unique)
     foreach ($relative in $allFiles) { $null = Owned-Path $target $relative }
     Close-ApplicationInstances
@@ -144,11 +145,22 @@ try {
             }
         }
         [IO.File]::WriteAllLines((Join-Path $target $manifestName), [string[]]$newFiles)
-        [IO.File]::WriteAllLines((Join-Path $publish $manifestName), [string[]]$newFiles)
+        foreach ($relative in $oldFiles) {
+            $directory = Split-Path (Owned-Path $target $relative) -Parent
+            while ($directory -ne $target -and (Test-Path -LiteralPath $directory -PathType Container)) {
+                if (Get-ChildItem -LiteralPath $directory -Force | Select-Object -First 1) { break }
+                Remove-Item -LiteralPath $directory
+                $directory = Split-Path $directory -Parent
+            }
+        }
+
     } catch {
         foreach ($relative in $allFiles) {
             $destination = Owned-Path $target $relative
-            if ($relative -in $existing) { Copy-Item -LiteralPath (Owned-Path $backup $relative) -Destination $destination -Force }
+            if ($relative -in $existing) {
+                New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+                Copy-Item -LiteralPath (Owned-Path $backup $relative) -Destination $destination -Force
+            }
             elseif (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force }
         }
         throw

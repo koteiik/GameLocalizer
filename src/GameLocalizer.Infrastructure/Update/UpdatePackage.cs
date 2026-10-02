@@ -21,7 +21,7 @@ public static class UpdatePaths
         {
             if (part is "" or "." or ".." || part.EndsWith('.') || part.EndsWith(' ') || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || part.Contains(':') ||
                 System.Text.RegularExpressions.Regex.IsMatch(part, @"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) throw new InvalidDataException("Небезопасный путь ZIP.");
-            if (new[] { "Models", "Settings", "Glossary", "logs", "jobs", "Updates", "GameLocalizer_Backup", "memory.db", "settings.json", "glossary.json" }.Contains(part, StringComparer.OrdinalIgnoreCase) || part.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) || part.EndsWith(".spm", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Обновление содержит пользовательские данные или модель.");
+            if (new[] { "Models", "Settings", "Glossary", "logs", "jobs", "Updates", "GameLocalizer_Backup", "memory.db", "analysis.db", "RuntimeDictionary", "Artwork", "settings.json", "glossary.json" }.Contains(part, StringComparer.OrdinalIgnoreCase) || part.EndsWith(".onnx", StringComparison.OrdinalIgnoreCase) || part.EndsWith(".spm", StringComparison.OrdinalIgnoreCase) || part.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase) || part.EndsWith(".db", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Обновление содержит пользовательские данные или модель.");
         }
         var result = Path.GetFullPath(Path.Combine(root, Path.Combine(parts)));
         if (!Inside(result, root)) throw new InvalidDataException("ZIP выходит за пределы директории.");
@@ -62,9 +62,13 @@ public sealed record PackageManifest(string Version, IReadOnlyList<PackageFile> 
 
 public static class UpdatePackage
 {
-    public const string ManifestName = "update-manifest.json";
+    public const string ManifestName = "app/update-manifest.json";
+    public const string LegacyManifestName = "update-manifest.json";
     public const long MaximumExpandedBytes = 2L * 1024 * 1024 * 1024;
-    public static readonly string[] RequiredFiles = ["GameLocalizer.exe", "GameLocalizer.dll", "GameLocalizer.deps.json", "GameLocalizer.runtimeconfig.json", "GameLocalizer.Core.dll", "GameLocalizer.Infrastructure.dll", "GameLocalizer.ModelHost.exe", "GameLocalizer.ModelHost.dll", "GameLocalizer.ModelHost.deps.json", "GameLocalizer.ModelHost.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll", "PresentationFramework.dll", "Updater/GameLocalizer.Updater.exe", "Updater/GameLocalizer.Updater.dll", "Updater/GameLocalizer.Updater.runtimeconfig.json", "Updater/GameLocalizer.Updater.deps.json", "Updater/coreclr.dll", "Updater/hostfxr.dll", "Updater/hostpolicy.dll"];
+    public static readonly string[] LegacyRequiredFiles = ["GameLocalizer.exe", "GameLocalizer.dll", "GameLocalizer.deps.json", "GameLocalizer.runtimeconfig.json", "GameLocalizer.Core.dll", "GameLocalizer.Infrastructure.dll", "GameLocalizer.ModelHost.exe", "GameLocalizer.ModelHost.dll", "GameLocalizer.ModelHost.deps.json", "GameLocalizer.ModelHost.runtimeconfig.json", "coreclr.dll", "hostfxr.dll", "hostpolicy.dll", "System.Private.CoreLib.dll", "PresentationFramework.dll", "Updater/GameLocalizer.Updater.exe", "Updater/GameLocalizer.Updater.dll", "Updater/GameLocalizer.Updater.runtimeconfig.json", "Updater/GameLocalizer.Updater.deps.json", "Updater/coreclr.dll", "Updater/hostfxr.dll", "Updater/hostpolicy.dll"];
+    public static readonly string[] RequiredFiles = LegacyRequiredFiles.Select(p => p == "GameLocalizer.exe" ? p : "app/" + p)
+        .Concat(["app/e_sqlite3.dll", "app/onnxruntime.dll", "app/RuntimeCollector/GameLocalizer.RuntimeCollector.dll"]).ToArray();
+    public static string[] RequiredFor(PackageManifest manifest) => manifest.Files.Any(f => f.Path == "app/GameLocalizer.dll") ? RequiredFiles : LegacyRequiredFiles;
     public static async Task VerifyHashAsync(string zip, string expected, CancellationToken ct)
     {
         if (!System.Text.RegularExpressions.Regex.IsMatch(expected, "^[a-fA-F0-9]{64}$")) throw new InvalidDataException("Отсутствует SHA256.");
@@ -93,7 +97,7 @@ public static class UpdatePackage
             if (!paths.Add(name) || ((entry.ExternalAttributes >> 16) & 0xf000) == 0xa000 || (entry.ExternalAttributes & (int)FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Дубликат или ссылка в ZIP.");
             total = checked(total + entry.Length); if (total > MaximumExpandedBytes) throw new InvalidDataException("ZIP слишком велик после распаковки.");
         }
-        var manifestEntry = zip.GetEntry(ManifestName) ?? throw new InvalidDataException("ZIP не содержит манифест обновления.");
+        var manifestEntry = zip.GetEntry(ManifestName) ?? zip.GetEntry(LegacyManifestName) ?? throw new InvalidDataException("ZIP не содержит манифест обновления.");
         if (manifestEntry.Length > 4 * 1024 * 1024) throw new InvalidDataException("Манифест слишком велик.");
         PackageManifest manifest;
         using (var input = manifestEntry.Open()) manifest = JsonSerializer.Deserialize<PackageManifest>(input, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidDataException("Манифест повреждён.");
@@ -104,7 +108,7 @@ public static class UpdatePackage
             UpdatePaths.RelativeFile(destination, file.Path);
             if (!listed.Add(file.Path) || file.Size < 0 || !System.Text.RegularExpressions.Regex.IsMatch(file.Sha256, "^[0-9a-fA-F]{64}$")) throw new InvalidDataException("Недопустимый манифест.");
         }
-        if (RequiredFiles.Any(p => !listed.Contains(p)) || !listed.SetEquals(zip.Entries.Where(e => !e.FullName.EndsWith('/') && e.FullName != ManifestName).Select(e => e.FullName))) throw new InvalidDataException("В ZIP отсутствуют обязательные файлы или есть неучтённые файлы.");
+        if (RequiredFor(manifest).Any(p => !listed.Contains(p)) || !listed.SetEquals(zip.Entries.Where(e => !e.FullName.EndsWith('/') && e.FullName != manifestEntry.FullName).Select(e => e.FullName))) throw new InvalidDataException("В ZIP отсутствуют обязательные файлы или есть неучтённые файлы.");
         Directory.CreateDirectory(destination);
         foreach (var file in manifest.Files)
         {
@@ -117,6 +121,6 @@ public static class UpdatePackage
             output.Flush(true);
             if (written != file.Size || !Convert.ToHexString(hash.GetHashAndReset()).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Контрольная сумма файла ZIP не совпадает.");
         }
-        UpdatePaths.WriteJson(Path.Combine(destination, ManifestName), manifest); return manifest;
+        UpdatePaths.WriteJson(Path.Combine(destination, manifestEntry.FullName), manifest); return manifest;
     }
 }

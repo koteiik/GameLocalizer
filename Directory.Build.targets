@@ -15,4 +15,12 @@
     <ItemGroup><UpdaterFiles Include="$(MSBuildThisFileDirectory)src/GameLocalizer.Updater/bin/$(Configuration)/net8.0-windows/$(RuntimeIdentifier)/**/*" /></ItemGroup>
     <Copy SourceFiles="@(UpdaterFiles)" DestinationFiles="@(UpdaterFiles->'$(TargetDir)Updater/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
   </Target>
+  <Target Name="CleanDistributionLayout" AfterTargets="Publish" DependsOnTargets="PublishLocalModelHost" Condition="'$(MSBuildProjectName)' == 'GameLocalizer.UI' and '$(RuntimeIdentifier)' == 'win-x64' and '$(UseCleanDistributionLayout)' != 'false'">
+    <ItemGroup>
+      <_DistributionFiles Include="$(PublishDir)**/*" Exclude="$(PublishDir)GameLocalizer.exe;$(PublishDir)app/**/*" />
+    </ItemGroup>
+    <Move SourceFiles="@(_DistributionFiles)" DestinationFiles="@(_DistributionFiles->'$(PublishDir)app/%(RecursiveDir)%(Filename)%(Extension)')" />
+    <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(PublishDir)GameLocalizer.exe" AppBinaryName="app/GameLocalizer.dll" IntermediateAssembly="@(IntermediateAssembly->'%(FullPath)')" WindowsGraphicalUserInterface="true" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts/Normalize-PublishLayout.ps1&quot; -PublishDirectory &quot;$(PublishDir).&quot;" />
+  </Target>
 </Project>

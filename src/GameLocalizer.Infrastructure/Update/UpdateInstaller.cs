@@ -75,8 +75,8 @@ public sealed class UpdateInstaller(string updatesRoot, IUpdateProcesses process
         if (!Guid.TryParseExact(request.Id, "N", out _) || request.InstallDirectory != UpdatePaths.Canonical(request.InstallDirectory)) throw new InvalidDataException("Некорректный запрос updater.");
         var data = Directory.GetParent(UpdatesRoot)!.FullName;
         if (request.InstallDirectory == UpdatePaths.Canonical(Path.GetPathRoot(request.InstallDirectory)!) || UpdatePaths.Inside(data, request.InstallDirectory) || UpdatePaths.Inside(request.InstallDirectory, data) || request.InstallDirectory.Equals(UpdatePaths.Canonical(data), StringComparison.OrdinalIgnoreCase)) throw new IOException("Installation directory пересекается с пользовательскими данными.");
-        if (!request.Release.CanInstall || !ReleaseClient.IsNewer(request.Release, request.OldVersion) || request.Release.Tag != "v" + request.Release.Version) throw new InvalidDataException("Недоверенная версия обновления.");
-        var expectedZip = Path.Combine(UpdatesRoot, request.Release.Tag, ReleaseClient.AssetName);
+        if (!ReleaseClient.IsPortableAsset(request.Release.Asset) || !request.Release.CanInstall || !ReleaseClient.IsNewer(request.Release, request.OldVersion) || request.Release.Tag != "v" + request.Release.Version) throw new InvalidDataException("Недоверенная версия обновления.");
+        var expectedZip = Path.Combine(UpdatesRoot, request.Release.Tag, request.Release.Asset);
         if (!UpdatePaths.Canonical(request.ZipPath).Equals(UpdatePaths.Canonical(expectedZip), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("ZIP находится вне папки обновлений.");
         if (request.OldVersion != "v" + SemanticVersion.Parse(request.OldVersion)) throw new InvalidDataException("Некорректная исходная версия.");
         foreach (var path in new[] { UpdatesRoot, request.InstallDirectory, request.ZipPath, StagePath(request), PreviousPath(request), BackupPath(request), JournalPath(request) }) UpdatePaths.NoLinks(path);
@@ -138,12 +138,13 @@ public sealed class UpdateInstaller(string updatesRoot, IUpdateProcesses process
         try
         {
             await UpdatePackage.VerifyHashAsync(request.ZipPath, request.Release.Sha256!, ct);
-            UpdatePackage.Extract(request.ZipPath, payload, request.Release.Version.ToString(), ct, request.Release.Sha256);
+            var manifest = UpdatePackage.Extract(request.ZipPath, payload, request.Release.Version.ToString(), ct, request.Release.Sha256);
             UpdatePaths.CopyTree(request.InstallDirectory, BackupPath(request), ct);
             Save(request, InstallPhase.BackedUp);
             UpdatePaths.CopyTree(request.InstallDirectory, stage, ct); // Unknown portable files retain their bytes.
+            RemoveUnchangedObsoleteFiles(stage, manifest, ct);
             UpdatePaths.CopyTree(payload, stage, ct);
-            foreach (var file in UpdatePackage.RequiredFiles) if (!File.Exists(UpdatePaths.RelativeFile(stage, file))) throw new InvalidDataException("Обязательный runtime-файл отсутствует.");
+            foreach (var file in UpdatePackage.RequiredFor(manifest)) if (!File.Exists(UpdatePaths.RelativeFile(stage, file))) throw new InvalidDataException("Обязательный runtime-файл отсутствует.");
             ct.ThrowIfCancellationRequested();
             // From this point cancellation cannot interrupt recovery.
             Save(request, InstallPhase.MovingOld); Directory.Move(request.InstallDirectory, previous);
@@ -161,6 +162,32 @@ public sealed class UpdateInstaller(string updatesRoot, IUpdateProcesses process
             try { processes.StartPrevious(request.InstallDirectory); } catch { /* Original bytes remain recoverable even if launch is denied. */ }
             throw;
         }
+    }
+    private static void RemoveUnchangedObsoleteFiles(string stage, PackageManifest next, CancellationToken ct)
+    {
+        var oldPath = GameLocalizer.Core.Models.DistributionPaths.Metadata(stage, UpdatePackage.LegacyManifestName);
+        if (!File.Exists(oldPath)) return;
+        UpdatePaths.NoLinks(oldPath);
+        if (new FileInfo(oldPath).Length > 4 * 1024 * 1024) throw new InvalidDataException("Манифест установленной версии слишком велик.");
+        var old = JsonSerializer.Deserialize<PackageManifest>(File.ReadAllText(oldPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        if (old?.Files == null) throw new InvalidDataException("Манифест установленной версии повреждён.");
+        var keep = next.Files.Select(f => f.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in old.Files)
+        {
+            ct.ThrowIfCancellationRequested();
+            var path = UpdatePaths.RelativeFile(stage, file.Path);
+            if (keep.Contains(file.Path) || !File.Exists(path) || new FileInfo(path).Length != file.Size) continue;
+            using (var input = File.OpenRead(path))
+                if (!Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(input)).Equals(file.Sha256, StringComparison.OrdinalIgnoreCase)) continue;
+            File.Delete(path);
+            var parent = Path.GetDirectoryName(path)!;
+            while (!parent.Equals(stage, StringComparison.OrdinalIgnoreCase) && !Directory.EnumerateFileSystemEntries(parent).Any())
+            {
+                UpdatePaths.NoLinks(parent); Directory.Delete(parent);
+                parent = Path.GetDirectoryName(parent)!;
+            }
+        }
+        if (next.Files.Any(f => f.Path == "app/GameLocalizer.dll") && Path.GetDirectoryName(oldPath) == stage) File.Delete(oldPath);
     }
     public void Recover(UpdateRequest request)
     {

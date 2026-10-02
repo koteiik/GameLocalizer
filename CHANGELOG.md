@@ -4,6 +4,7 @@
 
 ### Added
 ### Changed
+- Move development/project documents and dev-install into their dedicated folders. Windows distributions keep the main executable at the root and internal runtime files under `app/`, with legacy layout migration and rollback support.
 ### Fixed
 
 ## [0.5.0]

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
- <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><PlatformTarget>x64</PlatformTarget><InstalledRoot>E:\ProjectAI\GameLocalizer</InstalledRoot></PropertyGroup>
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0-windows</TargetFramework><PlatformTarget>x64</PlatformTarget><InstalledRoot>E:\ProjectAI\GameLocalizer</InstalledRoot><InstalledInternal Condition="Exists('$(InstalledRoot)\app\GameLocalizer.Core.dll')">$(InstalledRoot)\app</InstalledInternal><InstalledInternal Condition="'$(InstalledInternal)' == ''">$(InstalledRoot)</InstalledInternal></PropertyGroup>
  <ItemGroup>
-  <Reference Include="GameLocalizer.Core"><HintPath>$(InstalledRoot)\GameLocalizer.Core.dll</HintPath></Reference>
-  <Reference Include="GameLocalizer.Infrastructure"><HintPath>$(InstalledRoot)\GameLocalizer.Infrastructure.dll</HintPath></Reference>
-  <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>$(InstalledRoot)\Microsoft.Extensions.Logging.Abstractions.dll</HintPath></Reference>
+  <Reference Include="GameLocalizer.Core"><HintPath>$(InstalledInternal)\GameLocalizer.Core.dll</HintPath></Reference>
+  <Reference Include="GameLocalizer.Infrastructure"><HintPath>$(InstalledInternal)\GameLocalizer.Infrastructure.dll</HintPath></Reference>
+  <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>$(InstalledInternal)\Microsoft.Extensions.Logging.Abstractions.dll</HintPath></Reference>
  </ItemGroup>
 <ItemGroup><Compile Include="../../src/GameLocalizer.RuntimeCollector/RuntimeDictionaryLookup.cs" Link="RuntimeDictionaryLookup.cs"/></ItemGroup></Project>

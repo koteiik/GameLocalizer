@@ -8,7 +8,7 @@ public sealed class UpdateHandoff
     public static string Root => Path.Combine(Core.Models.ApplicationPaths.UserData, "Updates");
     public static async Task<string> PrepareAsync(AppRelease release, string zip, CancellationToken ct)
     {
-        var install = UpdatePaths.Canonical(AppContext.BaseDirectory);
+        var install = UpdatePaths.Canonical(GameLocalizer.Core.Models.ApplicationPaths.InstallDirectory);
         UpdateInstaller.ProbeInstallDirectory(install);
         await UpdatePackage.VerifyHashAsync(zip, release.Sha256!, ct);
         await Task.Run(() => UpdateInstaller.CheckFreeSpace(install, Root, zip, ct), ct);
@@ -16,7 +16,7 @@ public sealed class UpdateHandoff
         // Preflight before closing the main application. Installer repeats hash/extraction afterwards.
         await Task.Run(() => UpdatePackage.Extract(zip, Path.Combine(Root, "Preflight", id), release.Version.ToString(), ct, release.Sha256), ct);
         var runner = Path.Combine(Root, "Runner", id);
-        await Task.Run(() => UpdatePaths.CopyTree(Path.Combine(install, "Updater"), runner, ct), ct);
+        await Task.Run(() => UpdatePaths.CopyTree(GameLocalizer.Core.Models.DistributionPaths.Updater(install), runner, ct), ct);
         using var current = Process.GetCurrentProcess();
         var request = new UpdateRequest(id, zip, install, current.Id, current.StartTime.ToUniversalTime().Ticks, Core.Models.ApplicationVersion.Label, release);
         var installer = new UpdateInstaller(Root, new UpdateProcesses(Root)); installer.Validate(request); installer.Save(request, InstallPhase.Prepared);
@@ -37,10 +37,10 @@ public sealed class UpdateHandoff
         {
             var id = arguments[position + 1]; var installer = new UpdateInstaller(Root, new UpdateProcesses(Root));
             var request = installer.ReadRequest(Path.Combine(Root, "Transactions", id + ".json"));
-            if (request.Release.Tag != Core.Models.ApplicationVersion.Label || !request.InstallDirectory.Equals(UpdatePaths.Canonical(AppContext.BaseDirectory), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Запущена неверная версия обновления.");
+            if (request.Release.Tag != Core.Models.ApplicationVersion.Label || !request.InstallDirectory.Equals(UpdatePaths.Canonical(GameLocalizer.Core.Models.ApplicationPaths.InstallDirectory), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Запущена неверная версия обновления.");
             var ready = Path.Combine(Root, "Transactions", id + ".ready"); UpdatePaths.NoLinks(ready); File.WriteAllText(ready, id);
         }
-        return ConsumeNotification(Root, AppContext.BaseDirectory, Core.Models.ApplicationVersion.Label);
+        return ConsumeNotification(Root, GameLocalizer.Core.Models.ApplicationPaths.InstallDirectory, Core.Models.ApplicationVersion.Label);
     }
     public static UpdateNotification? ConsumeNotification(string root, string installation, string version)
     {

@@ -6,6 +6,10 @@
 #endif
 #define UninstallKey "Software\Microsoft\Windows\CurrentVersion\Uninstall\{" + AppIdentity + "}_is1"
 
+#ifndef InternalDir
+  #define InternalDir "app"
+#endif
+
 [Setup]
 SetupIconFile=..\src\GameLocalizer.UI\Assets\GameLocalizer.ico
 AppId={{{#AppIdentity}}
@@ -31,12 +35,13 @@ UsePreviousTasks=yes
 UninstallDisplayName={#DisplayName}
 UninstallDisplayIcon={app}\GameLocalizer.exe
 Uninstallable=yes
+UninstallFilesDir={app}\{#InternalDir}
 CloseApplications=no
 RestartApplications=no
 SetupMutex=Local\GameLocalizer-Setup-{#AppIdentity}
 WizardStyle=modern
 OutputDir={#OutputDir}
-OutputBaseFilename=GameLocalizer-Setup
+OutputBaseFilename=GameLocalizer-Setup-x64
 Compression=lzma2/fast
 SolidCompression=yes
 
@@ -49,9 +54,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#PublishDir}\*"; DestDir: "{app}"; Excludes: "update-manifest.json"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#InputDir}\install-files.txt"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#InputDir}\installation.ini"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#InputDir}\installer-payload.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#InputDir}\install-files.txt"; DestDir: "{app}\{#InternalDir}"; Flags: ignoreversion
+Source: "{#InputDir}\installation.ini"; DestDir: "{app}\{#InternalDir}"; Flags: ignoreversion
+Source: "{#InputDir}\installer-payload.json"; DestDir: "{app}\{#InternalDir}"; Flags: ignoreversion
 
 [Icons]
 Name: "{userprograms}\{#DisplayName}\GameLocalizer"; Filename: "{app}\GameLocalizer.exe"; WorkingDir: "{app}"; IconFilename: "{app}\GameLocalizer.exe"
@@ -153,7 +158,7 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
-var App, Registered: String; I, Attempts: Integer; Find: TFindRec;
+var App, Registered, OldManifest, OldUninstall: String; I, Attempts, Count: Integer; Find: TFindRec;
 begin
   Result := ''; App := ExpandConstant('{app}'); Registered := RegisteredPath;
   if not NoLinks(App) or InsideOrSame(App, UserDataPath) or InsideOrSame(UserDataPath, App) or
@@ -180,8 +185,15 @@ begin
   end;
   SetArrayLength(OldFiles, 0);
   if Registered <> '' then begin
-    if not NoLinks(App + '\install-files.txt') or not LoadStringsFromFile(App + '\install-files.txt', OldFiles) then begin
+    OldManifest := App + '\app\install-files.txt';
+    if not FileExists(OldManifest) then OldManifest := App + '\install-files.txt';
+    if not NoLinks(OldManifest) or not LoadStringsFromFile(OldManifest, OldFiles) then begin
       Result := 'Список файлов предыдущей установки отсутствует или небезопасен. Выполните восстановительную установку или удалите программу с сохранением данных.'; Exit;
+    end;
+    if ('{#InternalDir}' = 'app') and RegQueryStringValue(HKCU64, '{#UninstallKey}', 'UninstallString', OldUninstall) and
+      (CompareText(OldUninstall, '"' + App + '\unins000.exe"') = 0) then begin
+      Count := GetArrayLength(OldFiles); SetArrayLength(OldFiles, Count + 2);
+      OldFiles[Count] := 'unins000.exe'; OldFiles[Count + 1] := 'unins000.dat';
     end;
     for I := 0 to GetArrayLength(OldFiles) - 1 do
       if not RelativeOwnedFile(OldFiles[I]) or not NoLinks(AddBackslash(App) + OldFiles[I]) then begin Result := 'Недопустимый путь в списке файлов установки.'; Exit; end;
@@ -189,10 +201,10 @@ begin
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
-var NewFiles: TArrayOfString; I, J: Integer; Found: Boolean; FileName: String;
+var NewFiles: TArrayOfString; I, J: Integer; Found: Boolean; FileName, Parent: String;
 begin
   if CurStep = ssPostInstall then begin
-    if not LoadStringsFromFile(ExpandConstant('{app}\install-files.txt'), NewFiles) then RaiseException('Не найден новый список файлов.');
+    if not LoadStringsFromFile(ExpandConstant('{app}\{#InternalDir}\install-files.txt'), NewFiles) then RaiseException('Не найден новый список файлов.');
     for I := 0 to GetArrayLength(OldFiles) - 1 do begin
       Found := False;
       for J := 0 to GetArrayLength(NewFiles) - 1 do if CompareText(OldFiles[I], NewFiles[J]) = 0 then begin Found := True; Break; end;
@@ -200,6 +212,9 @@ begin
         FileName := AddBackslash(ExpandConstant('{app}')) + OldFiles[I];
         if not NoLinks(FileName) then RaiseException('Небезопасный путь устаревшего файла.');
         if FileExists(FileName) and not DeleteFile(FileName) then RaiseException('Не удалось удалить устаревший файл: ' + OldFiles[I]);
+        Parent := ExtractFileDir(FileName);
+        while (CompareText(Parent, ExpandConstant('{app}')) <> 0) and NoLinks(Parent) and RemoveDir(Parent) do
+          Parent := ExtractFileDir(Parent);
         Log('Removed obsolete owned file: ' + OldFiles[I]);
       end;
     end;

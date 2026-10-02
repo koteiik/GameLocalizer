@@ -25,7 +25,7 @@ public sealed class IsolatedTranslationRuntime(string? hostPath = null) : ITrans
     public async Task LoadAsync(string directory, TranslationDevice device, CancellationToken ct)
     {
         Unload(); ct.ThrowIfCancellationRequested();
-        var executable = hostPath ?? Path.Combine(AppContext.BaseDirectory, "GameLocalizer.ModelHost.exe");
+        var executable = hostPath ?? DistributionPaths.ModelHost(AppContext.BaseDirectory);
         if (!File.Exists(executable)) throw new FileNotFoundException("Локальный runtime отсутствует. Распакуйте все файлы ZIP приложения.", executable);
         process = new Process
         {

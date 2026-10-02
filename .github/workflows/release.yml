@@ -43,7 +43,7 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
-          ./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version '${{ env.RELEASE_VERSION }}' -ZipPath artifacts/GameLocalizer-win-x64.zip
+          ./scripts/Package.ps1 -PublishDirectory artifacts/publish -Version '${{ env.RELEASE_VERSION }}' -ZipPath artifacts/GameLocalizer-Portable-x64.zip
           ./scripts/Build-Installer.ps1 -PublishDirectory artifacts/publish -OutputDirectory artifacts
       - name: Sign Setup and finalize checksums
         shell: pwsh
@@ -51,20 +51,20 @@ jobs:
           CODE_SIGNING_PFX_BASE64: ${{ secrets.CODE_SIGNING_PFX_BASE64 }}
           CODE_SIGNING_PFX_PASSWORD: ${{ secrets.CODE_SIGNING_PFX_PASSWORD }}
         run: |
-          ./scripts/Sign-Release.ps1 -Files artifacts/GameLocalizer-Setup.exe
+          ./scripts/Sign-Release.ps1 -Files artifacts/GameLocalizer-Setup-x64.exe
           ./scripts/Finalize-InstallerRelease.ps1 -Directory artifacts
-          $status = (Get-AuthenticodeSignature artifacts/GameLocalizer-Setup.exe).Status
+          $status = (Get-AuthenticodeSignature artifacts/GameLocalizer-Setup-x64.exe).Status
           $notes = 'docs/RELEASE-${{ env.RELEASE_VERSION }}.md'
           if (Test-Path -LiteralPath $notes) { Copy-Item -LiteralPath $notes -Destination artifacts/release-notes.md }
           else { "GameLocalizer v${{ env.RELEASE_VERSION }}" | Set-Content artifacts/release-notes.md }
-          "`nInstaller signature: $status. See installer-manifest.json and SHA256SUMS.txt. No test signing is used." | Add-Content artifacts/release-notes.md
+          "`nInstaller signature: $status. See SHA256SUMS.txt. No test signing is used." | Add-Content artifacts/release-notes.md
       - name: Retain exact release assets for clean-profile validation
         uses: actions/upload-artifact@v4
         with:
           name: production-release-assets
           path: |
-            artifacts/GameLocalizer-Setup.exe
-            artifacts/GameLocalizer-win-x64.zip
+            artifacts/GameLocalizer-Setup-x64.exe
+            artifacts/GameLocalizer-Portable-x64.zip
             artifacts/SHA256SUMS.txt
             artifacts/installer-manifest.json
             artifacts/release-notes.md
@@ -84,9 +84,9 @@ jobs:
         shell: pwsh
         run: |
           $version = '${{ inputs.tag || github.ref_name }}'.TrimStart('v')
-          ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup.exe -Version $version
+          ./scripts/Test-ProductionInstaller.ps1 -Setup artifacts/GameLocalizer-Setup-x64.exe -Version $version
       - name: Create draft pending local Defender verification
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create '${{ inputs.tag || github.ref_name }}' artifacts/GameLocalizer-Setup.exe artifacts/GameLocalizer-win-x64.zip artifacts/SHA256SUMS.txt artifacts/installer-manifest.json --draft --title 'GameLocalizer ${{ inputs.tag || github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag
+        run: gh release create '${{ inputs.tag || github.ref_name }}' artifacts/GameLocalizer-Setup-x64.exe artifacts/GameLocalizer-Portable-x64.zip artifacts/SHA256SUMS.txt --draft --title 'GameLocalizer ${{ inputs.tag || github.ref_name }}' --notes-file artifacts/release-notes.md --generate-notes --verify-tag

@@ -20,7 +20,7 @@ After corrections, choose **Обновить Runtime словарь** and restar
 
 The runtime plugin requires neither GameLocalizer nor ModelHost during gameplay and has no network/model dependency. Gameplay verification remains a separate real-game check; unit tests and captured-entry review do not claim a new gameplay run.
 
-Local build/test/install uses `dev-install.ps1 -Launch`, targeting `E:\ProjectAI\GameLocalizer`. Public version, GitHub Releases, and tags are unchanged.
+Local build/test/install uses `scripts/dev-install.ps1 -Launch`, targeting `E:\ProjectAI\GameLocalizer`. Public version, GitHub Releases, and tags are unchanged.
 
 ## Reprocessing existing translations
 

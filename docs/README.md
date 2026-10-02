@@ -9,6 +9,8 @@
 
 ## Development
 
+- [Agent development instructions](development/AGENTS.md)
+- [Contributing](development/CONTRIBUTING.md)
 - [Local development workflow](LOCAL-DEVELOPMENT.md)
 - [Architecture](ARCHITECTURE.md)
 - [Validation and test fixtures](VALIDATION.md)
@@ -24,8 +26,14 @@
 
 ## Installation
 
+- [Distribution layout and migration](INSTALLATION-LAYOUT.md)
 - [Installer validation, signing and recovery](INSTALLER-VALIDATION.md)
 - [Updating and recovery](UPDATING.md)
+
+## Project
+
+- [Roadmap](project/ROADMAP.md)
+- [Third-party notices](project/THIRD_PARTY_NOTICES.md)
 
 ## Release history
 

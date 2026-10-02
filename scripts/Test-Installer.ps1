@@ -1,4 +1,4 @@
-param([ValidateSet('All','Build','InstallOld','Upgrade','Rollback','Update','Uninstall','ReinstallDelete')][string]$Phase = 'All', [string]$Dotnet = 'dotnet', [switch]$InteractiveUpdate)
+param([ValidateSet('All','Build','InstallOld','Upgrade','Rollback','Update','Uninstall','ReinstallDelete')][string]$Phase = 'All', [string]$Dotnet = 'dotnet', [switch]$InteractiveUpdate, [switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 $workspace = Split-Path $PSScriptRoot -Parent
 $qa = Join-Path $workspace 'artifacts/installer-qa'
@@ -9,7 +9,7 @@ $data = Join-Path $env:LOCALAPPDATA $dataName
 $registry = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{$identity}_is1"
 New-Item -ItemType Directory -Path $qa -Force | Out-Null
 function RunSetup([string]$Name, [string[]]$Extra = @()) {
-    $setup = Join-Path $qa "setup-$Name/GameLocalizer-Setup.exe"
+    $setup = Join-Path $qa "setup-$Name/GameLocalizer-Setup-x64.exe"
     $log = Join-Path $qa "install-$Name-$([guid]::NewGuid().ToString('N')).log"
     $process = Start-Process -FilePath $setup -ArgumentList (@('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',('/LOG="'+$log+'"')) + $Extra) -PassThru -Wait -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw "Installer failed ($Name): $($process.ExitCode), $log" }
@@ -18,6 +18,10 @@ function AssertVersion([string]$Version) {
     $entry = Get-ItemProperty -LiteralPath $registry
     if ($entry.DisplayVersion -ne $Version -or $entry.InstallLocation.TrimEnd('\') -ne $install) { throw 'Installed Apps metadata mismatch' }
     if ((Get-Item -LiteralPath (Join-Path $install 'GameLocalizer.exe')).VersionInfo.ProductVersion.Split('+')[0] -ne $Version) { throw 'EXE version mismatch' }
+    if ($Version -ne '0.2.3') {
+        if (!(Test-Path -LiteralPath (Join-Path $install 'app/unins000.exe'))) { throw 'Internal uninstaller missing' }
+        if (Get-ChildItem -LiteralPath $install -File | Where-Object Name -notin 'GameLocalizer.exe','unknown-user-file.txt') { throw 'Legacy owned files remain in installation root' }
+    }
 }
 function CloseQaApp {
     foreach ($process in Get-Process GameLocalizer -ErrorAction SilentlyContinue) {
@@ -33,10 +37,11 @@ function SnapshotUserFiles {
     $files += Get-Item -LiteralPath (Join-Path $qa 'synthetic-game/GameLocalizer_Backup/original.txt')
     @($files | ForEach-Object { @{Path=$_.FullName;Hash=(Get-FileHash -LiteralPath $_.FullName).Hash} }) | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $qa 'preserved.json')
 }
-if ($Phase -in 'All','Build') {
+if ($Phase -in 'All','Build' -and !$SkipBuild) {
     foreach ($item in @(@('old','0.2.3'),@('current','0.3.0'),@('next','0.3.1'))) {
         $name=$item[0]; $version=$item[1]; $publish=Join-Path $qa $name
-        & $Dotnet publish (Join-Path $workspace 'src/GameLocalizer.UI') -c Release -r win-x64 --self-contained true "-p:Version=$version" "-p:InstallerAppId=$identity" "-p:UserDataDirectoryName=$dataName" -o $publish
+        $layoutOption = if ($name -eq 'old') { '-p:UseCleanDistributionLayout=false' } else { '-p:UseCleanDistributionLayout=true' }
+        & $Dotnet publish $layoutOption (Join-Path $workspace 'src/GameLocalizer.UI') -c Release -r win-x64 --self-contained true "-p:Version=$version" "-p:InstallerAppId=$identity" "-p:UserDataDirectoryName=$dataName" -o $publish
         if ($LASTEXITCODE -ne 0) { throw 'QA publish failed' }
         & (Join-Path $PSScriptRoot 'Package.ps1') -PublishDirectory $publish -Version $version
         if ($name -eq 'old') { [IO.File]::WriteAllText((Join-Path $publish 'obsolete-owned.dll'),'Synthetic obsolete owned DLL') }
@@ -44,7 +49,7 @@ if ($Phase -in 'All','Build') {
         & (Join-Path $PSScriptRoot 'Build-Installer.ps1') -PublishDirectory $publish -OutputDirectory (Join-Path $qa "setup-$name")
     }
     $nextPublish = Join-Path $qa 'next'
-    $runtimeFile = Join-Path $nextPublish 'GameLocalizer.runtimeconfig.json'
+    $runtimeFile = Join-Path $nextPublish 'app/GameLocalizer.runtimeconfig.json'
     $originalRuntime = [IO.File]::ReadAllBytes($runtimeFile)
     try {
         [IO.File]::WriteAllText($runtimeFile, 'INVALID RUNTIME CONFIGURATION: intentional rollback fixture')
@@ -82,7 +87,7 @@ if ($Phase -in 'All','Upgrade') {
     CloseQaApp; SnapshotUserFiles; RunSetup current; AssertVersion '0.3.0'; CheckUserFiles
     if (Test-Path -LiteralPath (Join-Path $install 'obsolete-owned.dll')) { throw 'Old owned DLL was not cleaned' }
     if (!(Test-Path -LiteralPath (Join-Path $install 'unknown-user-file.txt'))) { throw 'Unknown file was removed' }
-    $old=Join-Path $qa 'setup-old/GameLocalizer-Setup.exe'
+    $old=Join-Path $qa 'setup-old/GameLocalizer-Setup-x64.exe'
     $blocked=Start-Process -FilePath $old -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-' -Wait -PassThru -WindowStyle Hidden
     if ($blocked.ExitCode -eq 0) { throw 'Silent downgrade was allowed' }; AssertVersion '0.3.0'
     Write-Output 'PASS: 0.2.3 -> 0.3.0, model/memory/settings/game backup preserved, old owned DLL removed, downgrade blocked'
@@ -90,7 +95,7 @@ if ($Phase -in 'All','Upgrade') {
 if ($Phase -in 'All','Rollback') {
     CloseQaApp; SnapshotUserFiles
     $report=Join-Path $qa 'rollback-button.txt'
-    $driver=Start-Process -FilePath (Join-Path $qa 'driver/GameLocalizer.InstallerSmoke.exe') -ArgumentList @(('"'+$install+'"'),('"'+(Join-Path $qa 'setup-broken/GameLocalizer-Setup.exe')+'"'),('"'+$report+'"'),'--auto') -PassThru -WindowStyle Hidden
+    $driver=Start-Process -FilePath (Join-Path $qa 'driver/GameLocalizer.InstallerSmoke.exe') -ArgumentList @(('"'+$install+'"'),('"'+(Join-Path $qa 'setup-broken/GameLocalizer-Setup-x64.exe')+'"'),('"'+$report+'"'),'--auto') -PassThru -WindowStyle Hidden
     if (!$driver.WaitForExit(120000) -or $driver.ExitCode -ne 0) { throw 'Rollback update handoff failed' }
     $deadline=[DateTime]::UtcNow.AddMinutes(4)
     do {
@@ -106,7 +111,7 @@ if ($Phase -in 'All','Rollback') {
 }
 if ($Phase -in 'All','Update') {
     CloseQaApp; SnapshotUserFiles
-    $report=Join-Path $qa 'update-button.txt'; $exe=Join-Path $qa 'driver/GameLocalizer.InstallerSmoke.exe'; $next=Join-Path $qa 'setup-next/GameLocalizer-Setup.exe'
+    $report=Join-Path $qa 'update-button.txt'; $exe=Join-Path $qa 'driver/GameLocalizer.InstallerSmoke.exe'; $next=Join-Path $qa 'setup-next/GameLocalizer-Setup-x64.exe'
     $arguments=@(('"'+$install+'"'),('"'+$next+'"'),('"'+$report+'"')); if (!$InteractiveUpdate) { $arguments+='--auto' }
     $driver=Start-Process -FilePath $exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
     if (!$driver.WaitForExit(120000)) { throw 'Update button harness timeout' }
@@ -125,12 +130,12 @@ if ($Phase -in 'All','Update') {
     if ($complete.Count -eq 0) { throw 'Updated app startup was not confirmed' }
     Write-Output 'PASS: UpdateCommand -> synthetic GitHub response -> Setup download -> SHA256 -> app exits -> Inno updates -> new app starts'
     CloseQaApp
-    & (Join-Path $qa 'offline-driver/GameLocalizer.Smoke.exe') $data --host (Join-Path $install 'GameLocalizer.ModelHost.exe') --replay > (Join-Path $qa 'offline-replay.log')
+    & (Join-Path $qa 'offline-driver/GameLocalizer.Smoke.exe') $data --host (Join-Path $install 'app/GameLocalizer.ModelHost.exe') --replay > (Join-Path $qa 'offline-replay.log')
     if ($LASTEXITCODE -ne 0) { throw 'Persisted SQLite cache/model replay failed' }
 }
 if ($Phase -in 'All','Uninstall') {
     CloseQaApp; SnapshotUserFiles
-    $uninstall=Join-Path $install 'unins000.exe'; $process=Start-Process -FilePath $uninstall -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru -WindowStyle Hidden
+    $uninstall=Join-Path $install 'app/unins000.exe'; $process=Start-Process -FilePath $uninstall -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART' -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw 'Uninstall failed' }
     $deadline=[DateTime]::UtcNow.AddSeconds(30)
     while ((Test-Path -LiteralPath (Join-Path $install 'GameLocalizer.exe')) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }
@@ -148,7 +153,7 @@ if ($Phase -in 'All','ReinstallDelete') {
     }
     RunSetup next; AssertVersion '0.3.1'; CheckUserFiles
     Write-Output 'PASS: reinstall with preserved data'
-    $process=Start-Process -FilePath (Join-Path $install 'unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEUSERDATA' -Wait -PassThru -WindowStyle Hidden
+    $process=Start-Process -FilePath (Join-Path $install 'app/unins000.exe') -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/DELETEUSERDATA' -Wait -PassThru -WindowStyle Hidden
     if ($process.ExitCode -ne 0) { throw 'Explicit data removal uninstall failed' }
     $deadline=[DateTime]::UtcNow.AddSeconds(60)
     while ((Test-Path -LiteralPath $data) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 200 }

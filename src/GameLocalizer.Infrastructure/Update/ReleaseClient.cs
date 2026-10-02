@@ -47,8 +47,12 @@ public record UpdateDownloadProgress(long Received, long Total);
 public sealed class ReleaseClient
 {
     public const string Repository = "koteiik/GameLocalizer";
-    public const string InstallerAssetName = "GameLocalizer-Setup.exe";
-    public const string AssetName = "GameLocalizer-win-x64.zip";
+    public const string InstallerAssetName = "GameLocalizer-Setup-x64.exe";
+    public const string AssetName = "GameLocalizer-Portable-x64.zip";
+    public const string LegacyInstallerAssetName = "GameLocalizer-Setup.exe";
+    public const string LegacyAssetName = "GameLocalizer-win-x64.zip";
+    public static bool IsInstallerAsset(string name) => name is InstallerAssetName or LegacyInstallerAssetName;
+    public static bool IsPortableAsset(string name) => name is AssetName or LegacyAssetName;
     public const long MaximumZipBytes = 512L * 1024 * 1024;
     private static readonly HttpClient Shared = new(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromMinutes(15) };
     private readonly HttpClient client;
@@ -64,6 +68,11 @@ public sealed class ReleaseClient
         if (version.Prerelease.Length != 0 || tag != "v" + version) return null;
         var assetName = installed ? InstallerAssetName : AssetName;
         var assets = root.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).ToArray();
+        if (assets.Length == 0)
+        {
+            assetName = installed ? LegacyInstallerAssetName : LegacyAssetName;
+            assets = root.GetProperty("assets").EnumerateArray().Where(a => a.GetProperty("name").GetString() == assetName).ToArray();
+        }
         if (assets.Length != 1) throw new InvalidDataException("В релизе отсутствует однозначный пакет Windows.");
         var asset = assets[0];
         var expected = $"https://github.com/{Repository}/releases/download/{tag}/{assetName}";
@@ -96,7 +105,7 @@ public sealed class ReleaseClient
     }
     public async Task<string> DownloadAsync(AppRelease release, string updatesRoot, IProgress<UpdateDownloadProgress>? progress, CancellationToken ct)
     {
-        if (!release.CanInstall || release.Asset is not (AssetName or InstallerAssetName) || release.Tag != "v" + release.Version || release.Version.Prerelease.Length != 0) throw new InvalidDataException("GitHub не предоставил доверенный SHA256. Скачайте ZIP вручную.");
+        if (!release.CanInstall || !(IsPortableAsset(release.Asset) || IsInstallerAsset(release.Asset)) || release.Tag != "v" + release.Version || release.Version.Prerelease.Length != 0) throw new InvalidDataException("GitHub не предоставил доверенный SHA256. Скачайте ZIP вручную.");
         var directory = Path.Combine(updatesRoot, release.Tag); UpdatePaths.NoLinks(directory); Directory.CreateDirectory(directory);
         var final = Path.Combine(directory, release.Asset); var partial = final + ".partial-" + Guid.NewGuid().ToString("N");
         HttpResponseMessage? response = null;
