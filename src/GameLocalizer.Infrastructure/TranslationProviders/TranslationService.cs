@@ -1,4 +1,4 @@
-using GameLocalizer.Core.Interfaces;
+﻿using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Models;
 using GameLocalizer.Core.Translation;
 using GameLocalizer.Core.Validation;
@@ -41,7 +41,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
         return memory.SaveAsync(new(item.Text, translated, key.SourceLanguage, key.TargetLanguage, game.Id, game.Name, file, LocalizationEntryId.DisplayKey(item.Key.Length == 0 ? item.Id : item.Key),
             key.Context, TranslationMemoryService.Identity(key, manual), provider.Name, now, now, item.Category, key.Model, key.ModelVersion, key.GlossaryVersion, now, manual), ct);
     }
-    public async Task<IReadOnlyList<TranslationOutcome>> TranslateDetailedAsync(Game game, string file, IReadOnlyList<TranslationItem> items, bool ignoreMemory, CancellationToken ct)
+    public async Task<IReadOnlyList<TranslationOutcome>> TranslateDetailedAsync(Game game, string file, IReadOnlyList<TranslationItem> items, bool ignoreMemory, CancellationToken ct, bool persistResults = true)
     {
         var result = new Dictionary<string, TranslationOutcome>(); var pending = new List<TranslationItem>();
         var cache = await FindManyAsync(game, items, ct);
@@ -51,7 +51,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
             cache.TryGetValue(item.Id, out var cached);
             if (cached != null && (!ignoreMemory || cached.Manual)) result[item.Id] = new(item.Id, cached.Text, cached.Manual ? TranslationStatus.Manual : TranslationStatus.FromMemory);
             else if (glossary.Match(item.Text, item.Category) is { } term)
-            { await Save(game, file, item, term, false, ct); result[item.Id] = new(item.Id, term, TranslationStatus.Translated); }
+            { if(persistResults) await Save(game, file, item, term, false, ct); result[item.Id] = new(item.Id, term, TranslationStatus.Translated); }
             else pending.Add(item);
         }
         var unique = pending.GroupBy(i => (i.Text, i.Context, i.Category)).Select(g => g.First()).ToArray();
@@ -71,7 +71,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
             catch (Exception e)
             {
                 if (batch.Count > 1) { foreach (var item in batch) await TranslateBatch([item]); return; }
-                Complete(batch[0], "", TranslationStatus.Failed, e.GetType().Name); return;
+                Complete(batch[0], "", TranslationStatus.Failed, $"{e.GetType().Name}: {e.Message}"); return;
             }
             foreach (var item in batch)
             {
@@ -85,7 +85,7 @@ public sealed class TranslationService(ITranslationProvider provider, ITranslati
                     translated = protector.Restore(translated, maps[item.Id].Tokens);
                     if (string.IsNullOrWhiteSpace(translated) || !new TranslationValidator().Validate(item.Text, translated, out _)) throw new InvalidDataException("Placeholder/markup validation failed");
                     // A completed response is durable even if cancellation arrives before the next batch.
-                    await Save(game, file, item, translated, false, CancellationToken.None);
+                    if(persistResults) await Save(game, file, item, translated, false, CancellationToken.None);
                     Complete(item, translated, TranslationStatus.Translated);
                 }
                 catch (InvalidDataException e) { Complete(item, "", TranslationStatus.ValidationError, e.Message); }

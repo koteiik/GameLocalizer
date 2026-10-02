@@ -1,4 +1,4 @@
-using GameLocalizer.Core.Models;
+﻿using GameLocalizer.Core.Models;
 using GameLocalizer.Core.Validation;
 namespace GameLocalizer.Infrastructure.FileSystem;
 
@@ -11,6 +11,7 @@ public sealed partial class ScanWorkspaceService
     public long ModelMemoryBytes => translator.MemoryBytes;
     public bool IsModelLoaded => translator.IsLoaded;
     public void UnloadModel() => translator.EndJob(true);
+    public TranslationJob? FindLatestJob(Game game) => jobs?.FindLatest(game.Id);
     public TranslationJob? FindIncomplete(Game game) => jobs?.FindIncomplete(game.Id);
     public async Task RestoreMemoryAsync(Game game, string session, CancellationToken ct)
     {
@@ -73,20 +74,32 @@ public sealed partial class ScanWorkspaceService
         return Enumerable.Range(0, 20).SelectMany(i => categories.Values.Where(v => v.Count > i).Select(v => v[i])).Take(20).ToArray();
     }
     public async Task<TranslationJob> RunTranslationJobAsync(Game game, string session, bool ignoreMemory, bool testOnly,
-        IProgress<TranslationJobProgress>? progress, CancellationToken ct)
+        IProgress<TranslationJobProgress>? progress, CancellationToken ct, bool failedOnly = false)
     {
         var preflight = await PreflightAsync(game, session, ignoreMemory, ct);
         var test = testOnly ? await TestSample(session, ct) : null;
-        var job = new TranslationJob { TestOnly = testOnly, GameId = game.Id, Provider = translator.Provider, Model = translator.Model, TotalStrings = test?.Count ?? preflight.TotalStrings, StartedAt = DateTimeOffset.UtcNow, Status = TranslationJobStatus.Running };
+        long failedCount = 0, failedAfter = 0;
+        if(failedOnly) while(true) {
+            var failed = await repository.ReadFailedAsync(session, failedAfter, ct);
+            if(failed.Count == 0) break; failedCount += failed.Count; failedAfter = failed[^1].Id;
+        }
+        long retained = 0, retainedAfter = 0;
+        if(failedOnly) while(true) {
+            var rows = await repository.ReadSelectedAsync(session, retainedAfter, false, ct);
+            if(rows.Count == 0) break;
+            retained += rows.Count(r => r.Status is "Manual" or "Translated" or "FromMemory");
+            retainedAfter = rows[^1].Id;
+        }
+        var job = new TranslationJob { SessionId = session, CachedStrings = retained, SkippedStrings = failedOnly ? Math.Max(0, preflight.TotalStrings - retained - failedCount) : 0, TestOnly = testOnly, GameId = game.Id, Provider = translator.Provider, Model = translator.Model, TotalStrings = test?.Count ?? preflight.TotalStrings, StartedAt = DateTimeOffset.UtcNow, Status = TranslationJobStatus.Running };
         if (jobs != null) await jobs.SaveAsync(job, ct);
-        int batchNumber = 0; long afterId = 0;
+        int batchNumber = 0; long afterId = 0; ScanRow[] activeBatch = [];
         try
         {
-            if (!testOnly) await repository.SetPendingStatusAsync(session, TranslationStatus.Queued, ct);
+            if (!testOnly && !failedOnly) await repository.SetPendingStatusAsync(session, TranslationStatus.Queued, ct);
             while (true)
             {
                 ct.ThrowIfCancellationRequested();
-                var page = test ?? await repository.ReadSelectedAsync(session, afterId, false, ct);
+                var page = test ?? (failedOnly ? await repository.ReadFailedAsync(session, afterId, ct) : await repository.ReadSelectedAsync(session, afterId, false, ct));
                 if (page.Count == 0) break;
                 foreach (var group in page.GroupBy(r => r.FilePath)) foreach (var batch in group.Chunk(16))
                 {
@@ -95,13 +108,20 @@ public sealed partial class ScanWorkspaceService
                     job.CachedStrings += batch.Length - pending.Length;
                     if (pending.Length != 0)
                     {
+                        activeBatch = pending;
                         await repository.SaveEditsAsync(session, pending.Select(r => new ScanEdit(r.Id, r.Translation, r.Selected, TranslationStatus.Translating)).ToArray(), ct);
                         progress?.Report(Report());
                         var outcomes = await translator.TranslateDetailedAsync(game, group.Key, pending.Select(Item).ToArray(), ignoreMemory, ct);
                         await repository.SaveEditsAsync(session, outcomes.Select(o => new ScanEdit(long.Parse(o.Id), o.Translation, true, o.Status)).ToArray(), CancellationToken.None);
+                        activeBatch = [];
                         job.CachedStrings += outcomes.Count(o => o.Status is TranslationStatus.FromMemory or TranslationStatus.Manual);
                         job.TranslatedStrings += outcomes.Count(o => o.Status == TranslationStatus.Translated);
                         job.FailedStrings += outcomes.Count(o => o.Status is TranslationStatus.Failed or TranslationStatus.ValidationError);
+                        job.CancelledStrings += outcomes.Count(o => o.Status == TranslationStatus.Cancelled);
+                        foreach(var outcome in outcomes.Where(o => o.Status is TranslationStatus.Failed or TranslationStatus.ValidationError)) {
+                            var row = pending.First(r => r.Id.ToString() == outcome.Id);
+                            job.Errors.Add(new(row.Id, row.Original, row.FilePath, outcome.Status.ToString(), outcome.Error ?? "Перевод не прошёл проверку", failedOnly ? "Повторная ошибка" : "Ожидает повтора"));
+                        }
                     }
                     if (jobs != null) await jobs.SaveAsync(job, CancellationToken.None);
                     progress?.Report(Report());
@@ -110,7 +130,7 @@ public sealed partial class ScanWorkspaceService
                 afterId = page[^1].Id;
             }
             ct.ThrowIfCancellationRequested();
-            job.Status = job.FailedStrings == 0 ? TranslationJobStatus.Completed : job.FailedStrings == job.TotalStrings ? TranslationJobStatus.Failed : TranslationJobStatus.PartiallyCompleted;
+            job.FinalizeJob(cancelled: job.CancelledStrings > 0);
         }
         catch (OperationCanceledException)
         {
@@ -119,13 +139,20 @@ public sealed partial class ScanWorkspaceService
             var completed = await PreflightAsync(game, session, false, CancellationToken.None);
             job.CachedStrings = Math.Min(job.TotalStrings, preflight.CachedStrings + preflight.ManualStrings);
             job.TranslatedStrings = Math.Max(job.TranslatedStrings, Math.Min(job.TotalStrings, completed.CachedStrings + completed.ManualStrings) - job.CachedStrings);
-            job.CancelledStrings = Math.Max(0, job.TotalStrings - job.TranslatedStrings - job.CachedStrings - job.FailedStrings);
-            await repository.SetPendingStatusAsync(session, TranslationStatus.Cancelled, CancellationToken.None);
+            job.CancelledStrings = Math.Max(0, job.TotalStrings - job.TranslatedStrings - job.CachedStrings - job.FailedStrings - job.SkippedStrings);
+            if(!failedOnly) await repository.SetPendingStatusAsync(session, TranslationStatus.Cancelled, CancellationToken.None);
+            else {
+                var interrupted = await repository.RowsByIdAsync(session, activeBatch.Select(r => r.Id).ToHashSet(), CancellationToken.None);
+                await repository.SaveEditsAsync(session, interrupted.Where(r => r.Status == "Translating").Select(r => new ScanEdit(r.Id,r.Translation,r.Selected,TranslationStatus.Cancelled)).ToArray(),CancellationToken.None);
+            }
+            job.FinalizeJob(cancelled: true);
         }
         catch
         {
-            job.Status = TranslationJobStatus.Failed;
-            await repository.SetPendingStatusAsync(session, TranslationStatus.Failed, CancellationToken.None); throw;
+            job.FinalizeJob(criticalFailure: true);
+            if(!failedOnly) await repository.SetPendingStatusAsync(session, TranslationStatus.Failed, CancellationToken.None);
+            else await repository.SaveEditsAsync(session, activeBatch.Select(r => new ScanEdit(r.Id,r.Translation,r.Selected,TranslationStatus.Failed)).ToArray(),CancellationToken.None);
+            throw;
         }
         finally
         {

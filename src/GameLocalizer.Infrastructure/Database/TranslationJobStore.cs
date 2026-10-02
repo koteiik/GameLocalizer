@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using GameLocalizer.Core.Models;
 namespace GameLocalizer.Infrastructure.Database;
 
@@ -19,6 +19,11 @@ public sealed class TranslationJobStore(string directory)
     }
     public TranslationJob? FindIncomplete(string gameId)
     {
+        var latest = FindLatest(gameId);
+        return latest?.Status is TranslationJobStatus.Completed or TranslationJobStatus.PartiallyCompleted ? null : latest;
+    }
+    public TranslationJob? FindLatest(string gameId)
+    {
         if (!Directory.Exists(directory)) return null;
         var latest = Directory.EnumerateFiles(directory, "*.json").Select(path =>
         {
@@ -26,6 +31,6 @@ public sealed class TranslationJobStore(string directory)
             catch (Exception e) when (e is IOException or JsonException) { return null; }
         }).Where(j => j?.GameId == gameId && !j.TestOnly)
             .OrderByDescending(j => j!.StartedAt).FirstOrDefault();
-        return latest?.Status == TranslationJobStatus.Completed ? null : latest;
+        return latest;
     }
 }

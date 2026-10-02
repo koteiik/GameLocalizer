@@ -1,4 +1,5 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using GameLocalizer.Core.Models;
@@ -7,8 +8,6 @@ using GameLocalizer.UI.Views;
 namespace GameLocalizer.UI.ViewModels;
 public sealed partial class MainViewModel
 {
-    private readonly Func<ApplySelectionSummary, string>? emptyTranslationChoice;
-    private readonly Func<string, bool>? confirmApply;
     private bool applyNeedsAnalysis;
     private long uiFound, shortUiFound, uiSelected, missedUi;
     private int previewTabIndex;
@@ -36,29 +35,46 @@ public sealed partial class MainViewModel
         await FlushEditsAsync(); ct.ThrowIfCancellationRequested();
         var selection = await workspace.ApplySelectionAsync(op.Session, ct);
         var skipEmpty = selection.EmptyTranslationRows.Count > 0;
-        if (skipEmpty)
-        {
-            var choice = emptyTranslationChoice?.Invoke(selection);
-            if (choice == null)
-            {
-                var dialog = new ChoiceWindow("Есть пустые строки", $"Среди выбранных строк есть пустые переводы: {selection.SkippedEmptyTranslations:N0}.\n\nПропустить их и применить остальные?", "Да", "Показать", "Нет") { Owner = Application.Current?.MainWindow };
-                dialog.ShowDialog(); choice = dialog.Choice;
-            }
-            if (!await ResolveEmptyTranslationChoiceAsync(selection, choice)) return;
+        if(selection.ValidationErrorEntries>0) {
+            var error=new InvalidDataException("Blocking ValidationError");
+            await workspace.RecordBlockedApplyAsync(op.Game,selection);
+            applyResult=ResultFromReport(op.Game,op.Session,workspace.LastApplyReport,error,workspace.LastDiagnosticReportPath,null);
+            await applyStates.SaveAsync(applyResult);RefreshDiagnosticReport();NotifyApplyState();Status=ApplyErrorSummary;return;
         }
-        if (selection.ValidationErrorEntries > 0) { await workspace.RecordBlockedApplyAsync(op.Game, selection); RefreshDiagnosticReport(); throw new System.IO.InvalidDataException(selection.Description + "\nВыбранные строки содержат Validation Error; исправьте их перед Apply."); }
-        var description = await workspace.ApplyDescriptionAsync(op.Session, ct, skipEmpty);
-        var text = selection.Description + "\n\n" + description + "\n\nЗакройте игру. Применить перевод?\nСкрытые фильтром выбранные строки тоже включены. Будет создана резервная копия.";
-        var accepted = confirmApply?.Invoke(text) ?? MessageBox.Show(text, "Применить перевод", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
-        if (!accepted) return;
-        workspace.DiagnosticApplyTrace = Settings.DiagnosticApplyTrace;
-        try { await Task.Run(() => workspace.ApplyAsync(op.Game, op.Session, Settings.ApplyMode, skipEmpty, ct), ct); }
-        finally { RefreshDiagnosticReport(); }
-        if (IsCurrent(op))
-        {
-            applyNeedsAnalysis = false; CommandManager.InvalidateRequerySuggested();
-            Status = $"Применено: {selection.AppliedEntries:N0} строк. Пропущено пустых: {selection.SkippedEmptyTranslations:N0}.\n" + workspace.DiagnosticSummary + "\nОригиналы сохранены; кэш анализа обновлён.";
+        var files=await repository.SelectedFilesAsync(op.Session,skipEmpty,ct);
+        var description=await workspace.ApplyDescriptionAsync(op.Session,ct,skipEmpty);
+        var summary=new ApplySummary(selection,files.Count,selection.Description+"\n\n"+description,!Settings.SkipCombinedApplyWarning);
+        ApplySummaryDecision decision;
+        if(applySummaryChoice != null)decision=applySummaryChoice(summary);
+        else {var dialog=new ApplySummaryWindow(summary){Owner=Application.Current?.MainWindow};dialog.ShowDialog();decision=dialog.Decision;}
+        if(decision.Choice=="Показать пропущенные") {IsTranslation=true;await ResolveEmptyTranslationChoiceAsync(selection,"Показать");return;}
+        if(decision.Choice!="Применить")return;
+        if(decision.DontAskAgain){Settings.SkipCombinedApplyWarning=true;settingsService.Save(Settings);}
+        var previous=applyResult?.State == GameApplyState.ApplyPartiallyCompleted ? applyResult : null;
+        IReadOnlySet<string>? verified=null;
+        if(previous != null) {
+            if(await ApplyStateStore.VerifyFilesAsync(previous,ct)) {await workspace.VerifyApplyOwnershipAsync(op.Game,previous.VerifiedFiles,ct);verified=previous.VerifiedFiles.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);}
+            else previous=null;
         }
+        applyResult=new(){Root=op.Game.Path,Session=op.Session,State=GameApplyState.Applying};
+        NotifyApplyState();
+        workspace.DiagnosticApplyTrace=Settings.DiagnosticApplyTrace;
+        try {
+            await applyStates.SaveAsync(applyResult);
+            await Task.Run(()=>workspace.ApplyAsync(op.Game,op.Session,Settings.ApplyMode,skipEmpty,ct,verified),ct);
+            var result=ResultFromReport(op.Game,op.Session,workspace.LastApplyReport,null,workspace.LastDiagnosticReportPath,previous);
+            if(result.FilesApplied==0)throw new IOException("No verified apply output");
+            if(!await ApplyStateStore.VerifyFilesAsync(result,ct))throw new IOException("Applied output verification failed");
+            await workspace.VerifyApplyOwnershipAsync(op.Game,result.VerifiedFiles,ct);
+            await applyStates.SaveAsync(result);
+            if(IsCurrent(op)){applyResult=result;applyNeedsAnalysis=false;translationApplied=true;Status=$"Применено: {selection.AppliedEntries:N0} строк. Пропущено пустых: {selection.SkippedEmptyTranslations:N0}.";}
+        }
+        catch(Exception error) {
+            var result=ResultFromReport(op.Game,op.Session,workspace.LastApplyReport,error,workspace.LastDiagnosticReportPath,previous);
+            if(IsCurrent(op)){applyResult=result;translationApplied=false;Status=ApplyErrorSummary;}
+            try {await applyStates.SaveAsync(result);} catch(IOException) { } catch(UnauthorizedAccessException) { }
+        }
+        finally {if(IsCurrent(op)){RefreshDiagnosticReport();NotifyApplyState();}}
     });
     private Task SearchUiResourcesAsync() => Run(async (op, ct) =>
     {

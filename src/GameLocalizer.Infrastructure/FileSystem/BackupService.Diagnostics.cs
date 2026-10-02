@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using GameLocalizer.Core.Models;
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Localization;
@@ -14,6 +14,7 @@ public sealed class ApplyDiagnosticReport
     public List<object> SkippedEmptyRows { get; set; } = [];
     public int SkippedEmptyTranslations => SkippedEmptyRows.Count;
     public bool VerboseTrace { get; set; }
+    public string Stage { get; set; } = "Preparation";
     public string Status { get; set; } = "FAILED";
     public string Error { get; set; } = "";
     public string Root { get; set; } = "";
@@ -115,9 +116,13 @@ public sealed partial class BackupService
                 }
                 var selected = file.Entries.Where(e => e.Selected).ToDictionary(e => e.Id, e => e.Russian);
                 snapshots.Add(path, (snapshot, adapter, selected));
-                if (snapshot.Hash == TextFiles.Hash(change.Content)) throw new IOException("Apply reported changes but physical file hash did not change.");
+
             }
-            await ApplyCoreAsync(root, changes, ct);
+            report.Stage = "Write";
+            var changed = changes.Where(c => c.ExpectedHash != TextFiles.Hash(c.Content)).ToArray();
+            if(changed.Length > 0) await ApplyCoreAsync(root, changed, ct);
+            report.Stage = "Verification";
+            await VerifyOwnershipAsync(root,changes.ToDictionary(c => c.RelativePath,c => TextFiles.Hash(c.Content)),ct);
         }
         catch (Exception e) { report.Error = e.Message; throw; }
         finally
@@ -146,7 +151,7 @@ public sealed partial class BackupService
                             file.BackupMatchesOriginal = file.BackupExists && file.BackupSHA256 == file.OriginalSHA256;
                         }
                     }
-                    if (!file.ParseSuccess || file.Entries.Any(e => e.Selected && e.ValidationStatus != "PASS") || !file.BackupMatchesOriginal || file.AfterHash == file.BeforeHash || file.AfterHash != TextFiles.Hash(changes.First(c => Resolve(root, c.RelativePath) == file.PhysicalTargetFile).Content))
+                    if (!file.ParseSuccess || file.Entries.Any(e => e.Selected && e.ValidationStatus != "PASS") || !file.BackupMatchesOriginal || file.AfterHash != TextFiles.Hash(changes.First(c => Resolve(root, c.RelativePath) == file.PhysicalTargetFile).Content))
                         file.Error = "Disk/parse/value/backup/output verification failed";
                 }
                 catch (Exception e) { file.Error = e.Message; }
@@ -154,6 +159,7 @@ public sealed partial class BackupService
             if (selection == null) report.SelectedEntries = report.EntriesExpected;
             await DetectDuplicatesAsync(report);
             report.Status = report.Error.Length == 0 && report.Files.Count == changes.Count && report.Files.All(f => f.Error.Length == 0 && f.ParseSuccess) ? "SUCCESS" : report.FilesActuallyChanged > 0 ? "PARTIAL" : "FAILED";
+            if(report.Status == "SUCCESS") report.Stage = "Completed";
             await SaveDiagnosticReportAsync(report);
         }
         if (report.Status != "SUCCESS") throw new IOException(report.Summary);

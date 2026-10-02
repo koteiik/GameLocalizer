@@ -1,4 +1,4 @@
-using GameLocalizer.Core.Interfaces;
+﻿using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Models;
 using GameLocalizer.Core.Localization;
 using GameLocalizer.Core.Validation;
@@ -15,6 +15,8 @@ public sealed partial class ScanWorkspaceService(ScanPipeline pipeline, ScanResu
     public string? ScanDiagnosticLogPath => pipeline.DiagnosticLog.LastLogPath;
     public int ScanErrorCount => Math.Max(pipeline.ErrorCount,analysisErrors);
     public string? LastDiagnosticReportPath => backup.LastDiagnosticReportPath;
+    public ApplyDiagnosticReport? LastApplyReport => backup.LastDiagnosticReport;
+    public Task VerifyApplyOwnershipAsync(Game game,IReadOnlyDictionary<string,string> files,CancellationToken ct) => backup.VerifyOwnershipAsync(game.Path,files,ct);
     public string DiagnosticSummary => backup.LastDiagnosticReport?.Summary ?? "";
     public bool DiagnosticApplyTrace { get => backup.DiagnosticApplyTrace; set => backup.DiagnosticApplyTrace = value; }
     public async Task<ScanProgress> ScanAsync(Game game, string session, IProgress<ScanProgress>? progress, CancellationToken ct)
@@ -49,13 +51,13 @@ public sealed partial class ScanWorkspaceService(ScanPipeline pipeline, ScanResu
     }
     public Task<int> ApplyAsync(Game game, string session, CancellationToken ct) => ApplyAsync(game, session, LocalizationApplyMode.CompatibleReplacement, ct);
     public Task<int> ApplyAsync(Game game, string session, LocalizationApplyMode mode, CancellationToken ct) => ApplyAsync(game, session, mode, false, ct);
-    public async Task<int> ApplyAsync(Game game, string session, LocalizationApplyMode mode, bool skipEmpty, CancellationToken ct)
+    public async Task<int> ApplyAsync(Game game, string session, LocalizationApplyMode mode, bool skipEmpty, CancellationToken ct, IReadOnlySet<string>? verifiedFiles = null)
     {
         if (mode != LocalizationApplyMode.CompatibleReplacement) throw new NotSupportedException("SeparateTargetLocale — будущий расширенный режим; пока недоступен.");
         var selection = await repository.ApplySelectionAsync(session, ct);
-        var files = await repository.SelectedFilesAsync(session, skipEmpty, ct);
+        var files = (await repository.SelectedFilesAsync(session, skipEmpty, ct)).Where(f => verifiedFiles == null || !verifiedFiles.Contains(f.FilePath)).ToArray();
         var staging = Path.Combine(Path.GetTempPath(), "GameLocalizer", "staging", Guid.NewGuid().ToString("N"));
-        if (files.Count == 0) { if (skipEmpty) await backup.RecordNoWriteApplyAsync(game.Path, selection); return 0; }
+        if (files.Length == 0) { if (skipEmpty) await backup.RecordNoWriteApplyAsync(game.Path, selection); return 0; }
         var configuration = await LocalizationConfiguration.ReadAsync(game.Path, ct);
         Directory.CreateDirectory(staging);
         var prepared = new List<FileChange>();
@@ -99,7 +101,7 @@ public sealed partial class ScanWorkspaceService(ScanPipeline pipeline, ScanResu
                 if (!validation.Adapter.Validate(validation.Original, written.Text, validation.Translations)) throw new InvalidDataException("Applied parser validation failed");
             }
             await RefreshAppliedStampsAsync(game,session,true,ct);
-            return files.Count;
+            return files.Length;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception e) { if (!backupStarted) await backup.RecordPreparationFailureAsync(game.Path, e, selection); throw new IOException(backup.LastDiagnosticReport?.Summary ?? e.Message, e); }

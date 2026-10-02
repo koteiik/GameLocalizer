@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using GameLocalizer.Core.Localization;
 using GameLocalizer.Core.Models;
@@ -43,6 +43,14 @@ public sealed class ApplyDiagnosticsTests : IDisposable
         Assert.Equal(bytes, File.ReadAllBytes(config)); Assert.False(Directory.Exists(Path.Combine(root, "BepInEx/Translation/ru")));
         Assert.Contains("FromLanguage", File.ReadAllText(backup.LastDiagnosticReportPath!));
     }
+    [Fact] public async Task AlreadyAppliedOwnedContentIsVerifiedWithoutRewriting() {
+        var change=await Change();await backup.ApplyAsync(root,[change],default);
+        var target=Path.Combine(root,relative);var stamp=File.GetLastWriteTimeUtc(target);
+        await backup.ApplyAsync(root,[change with {ExpectedHash=TextFiles.Hash(change.Content)}],default);
+        Assert.Equal("SUCCESS",backup.LastDiagnosticReport!.Status);Assert.Equal("Completed",backup.LastDiagnosticReport.Stage);
+        Assert.Equal(0,backup.LastDiagnosticReport.FilesActuallyChanged);Assert.Equal(stamp,File.GetLastWriteTimeUtc(target));
+        Assert.True(backup.LastDiagnosticReport.Files.Single().BackupMatchesOriginal);Assert.Equal("PASS",backup.LastDiagnosticReport.Files.Single().Entries.Single().ValidationStatus);
+    }
     [Fact] public async Task UnknownWithoutConfig() { await backup.ApplyAsync(root, [await Change()], default); Assert.Equal("UNKNOWN", backup.LastDiagnosticReport!.ActiveLocalizationMismatch); }
     [Fact] public async Task DuplicateAndOverrideValuesReported()
     {
@@ -51,11 +59,11 @@ public sealed class ApplyDiagnosticsTests : IDisposable
         Assert.Equal("YES", entry.PotentialOverrideConflict); Assert.Single(entry.CompetingFiles); Assert.Equal(1, backup.LastDiagnosticReport.DuplicateKeyConflicts);
         var text = File.ReadAllText(backup.LastDiagnosticReportPath!); Assert.Contains("other.txt", text); Assert.Contains("Thank you.", text); Assert.Equal("ありがとう=Thank you.", File.ReadAllText(competitor));
     }
-    [Fact] public async Task UnchangedContentFailsAndGeneratesReport()
+    [Fact] public async Task UnownedUnchangedContentFailsOwnershipAndGeneratesReport()
     {
         var change = await Change(); change = change with { Content = File.ReadAllBytes(Path.Combine(root, relative)) };
         await Assert.ThrowsAsync<IOException>(() => backup.ApplyAsync(root, [change], default)); Assert.Equal("FAILED", backup.LastDiagnosticReport!.Status);
-        Assert.Contains("physical file hash did not change", backup.LastDiagnosticReport.Error); Assert.True(File.Exists(backup.LastDiagnosticReportPath));
+        Assert.Contains("Ownership manifest missing", backup.LastDiagnosticReport.Error); Assert.True(File.Exists(backup.LastDiagnosticReportPath));
     }
     [Fact] public async Task MissingTargetFails() { var change = await Change(); File.Delete(Path.Combine(root, relative)); await Assert.ThrowsAsync<IOException>(() => backup.ApplyAsync(root, [change], default)); Assert.Equal("FAILED", backup.LastDiagnosticReport!.Status); }
     [Fact] public async Task CorruptBackupFails()

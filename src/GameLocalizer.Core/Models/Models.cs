@@ -1,10 +1,16 @@
-namespace GameLocalizer.Core.Models;
+﻿namespace GameLocalizer.Core.Models;
 
 public enum EngineType { Unknown, Unity, Unreal, Godot, RenPy, RpgMaker }
 public record EngineDetection(EngineType EngineType, double Confidence, IReadOnlyList<string> DetectedEvidence);
 public sealed class Game(string id, string name, string path, string platform, string? library = null) : System.ComponentModel.INotifyPropertyChanged
 {
     // WPF Selector stores selected items in a hash table. Identity must not depend on mutable state.
+    private object? artwork;
+    private bool artworkIsIcon;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public object? Artwork { get => artwork; set { artwork=value; PropertyChanged?.Invoke(this,new(nameof(Artwork))); } }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool ArtworkIsIcon { get => artworkIsIcon; set { artworkIsIcon=value; PropertyChanged?.Invoke(this,new(nameof(ArtworkIsIcon))); } }
     public string Id { get; } = id;
     public string Name { get; } = name;
     public string Path { get; } = path;
@@ -59,11 +65,16 @@ public record FileChange(string RelativePath, string ExpectedHash, byte[] Conten
 public record BackupEntry(string RelativePath, string OriginalHash, string AppliedHash, string ObjectName, DateTimeOffset CreatedAt);
 public class AppSettings
 {
+    public string SelectedPanelDock { get; set; } = "Bottom";
+    public double SelectedPanelBottomHeight { get; set; } = 300;
+    public double SelectedPanelRightWidth { get; set; } = 380;
+    public bool SelectedPanelCollapsed { get; set; }
     public string Language { get; set; } = "ru";
     public string TranslationProvider { get; set; } = "Offline";
     public OfflineSettings Offline { get; set; } = new();
     public string TargetLanguage { get; set; } = "ru";
     public LocalizationApplyMode ApplyMode { get; set; } = LocalizationApplyMode.CompatibleReplacement;
+    public bool SkipCombinedApplyWarning { get; set; }
     public bool DiagnosticApplyTrace { get; set; } = true;
     public bool CheckUpdatesOnStartup { get; set; } = true;
     public string GitHubRepository { get; set; } = "koteiik/GameLocalizer";

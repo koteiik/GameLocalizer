@@ -5,4 +5,4 @@
   <Reference Include="GameLocalizer.Infrastructure"><HintPath>$(InstalledRoot)\GameLocalizer.Infrastructure.dll</HintPath></Reference>
   <Reference Include="Microsoft.Extensions.Logging.Abstractions"><HintPath>$(InstalledRoot)\Microsoft.Extensions.Logging.Abstractions.dll</HintPath></Reference>
  </ItemGroup>
-</Project>
+<ItemGroup><Compile Include="../../src/GameLocalizer.RuntimeCollector/RuntimeDictionaryLookup.cs" Link="RuntimeDictionaryLookup.cs"/></ItemGroup></Project>

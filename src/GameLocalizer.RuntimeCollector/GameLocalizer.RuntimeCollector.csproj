@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net472</TargetFramework><AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath><LangVersion>latest</LangVersion><ImplicitUsings>disable</ImplicitUsings><Nullable>disable</Nullable><AssemblyName>GameLocalizer.RuntimeCollector</AssemblyName></PropertyGroup>
+<ItemGroup><Reference Include="System.Runtime.Serialization"/><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all"/></ItemGroup>
+<!-- Compile-only references: the game/loader provides these at runtime. -->
+<ItemGroup Condition="'$(CollectorGameRoot)' == ''">
+  <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" IncludeAssets="compile;build" />
+  <PackageReference Include="HarmonyX" Version="2.9.0" PrivateAssets="all" IncludeAssets="compile;build" />
+  <PackageReference Include="UnityEngine.Modules" Version="2018.2.20" PrivateAssets="all" IncludeAssets="compile;build" />
+</ItemGroup>
+<ItemGroup Condition="'$(CollectorGameRoot)' != ''"><Reference Include="BepInEx"><HintPath>$(CollectorGameRoot)\BepInEx\core\BepInEx.dll</HintPath><Private>false</Private></Reference><Reference Include="0Harmony"><HintPath>$(CollectorGameRoot)\BepInEx\core\0Harmony.dll</HintPath><Private>false</Private></Reference><Reference Include="UnityEngine"><HintPath>$(CollectorGameRoot)\AI-Shoujo_Data\Managed\UnityEngine.dll</HintPath><Private>false</Private></Reference><Reference Include="UnityEngine.CoreModule"><HintPath>$(CollectorGameRoot)\AI-Shoujo_Data\Managed\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference></ItemGroup>
+</Project>
+

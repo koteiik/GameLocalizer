@@ -1,0 +1,17 @@
+# Runtime UI Collector v1 (development)
+
+Read-only diagnostic plugin for Unity Mono and existing BepInEx 5. AI-Shoujo is the first build/runtime target. This does not install a loader. IL2CPP is unsupported. Release builds use pinned compile-only BepInEx.Core, HarmonyX and UnityEngine.Modules references from NuGet. An explicit CollectorGameRoot can still select installed AI-Shoujo references for local development. Game and loader assembly binaries are never shipped with the package.
+
+The Runtime UI tab installs only after the explicit warning, removes only ownership-manifest files with matching SHA256, and imports captures after the game is closed. GameLocalizer never installs the collector during ordinary analysis. Files changed after installation are preserved and removal stops for review. Other plugins, translations, and mods are preserved. Local data remains after uninstall.
+
+Hooks queue dirty components on the Unity main thread. Unity UI uses text setters and enable callbacks. TMP setters/enable callbacks are patched; actual rendered TMP values are read with GetParsedText after GenerateTextMesh, including formatted SetText values. A one-time initial snapshot covers existing UI. LateUpdate processes only queued components, not a full component scan. Multiple callbacks for one component in the same frame produce one observation of its final visible value. Intermediate values that are replaced before display are intentionally omitted. Active/enabled is an approximation of visibility: clipping/occlusion is not detected. No UI property is assigned and no mesh rebuild is forced.
+
+A bounded in-memory map deduplicates Text/Scene/Hierarchy/Component. SeenCount counts observation episodes. The writer flushes cumulative snapshots every two seconds, off the Unity thread, to:
+
+%LOCALAPPDATA%/GameLocalizer/RuntimeCollector/<SHA256-of-canonical-game-path-prefix>/runtime-ui-<capture-session>.jsonl
+
+Capture is bounded to 100,000 identities and 10,000 pending components. A crash can lose the final two-second buffer. Import skips malformed/truncated JSONL records, takes the last cumulative count per identity per session, then sums independent sessions. Re-import is idempotent. FirstSeen and LastSeen use UTC. Collector failures are isolated and error messages are buffered to collector-errors.log. Numeric-only values, clock-like strings, FPS, and explicit object IDs are filtered; short words are retained. Normalization and localization-owner discovery are optional and are not implemented in v1.
+
+Runtime UI rows are separate read-only diagnostics and never enter translation/apply selection. Matching uses exact text against the current analysis session (writable adapter rows take precedence) and cached Unsupported UI discovery. A text match is evidence of a candidate source, not proof of the active runtime localization layer. Refresh analysis before importing if the cache is stale. Raw captures remain available for subsequent imports.
+
+Validation: Release package built against actual AI-Shoujo libraries; synthetic observer tests link the production observer with Unity/BepInEx/Harmony stubs. These tests do not prove Harmony detours, FPS impact, or real game visibility. Those require a manual game run. After installation, open Chat, Give Advice, Give Item, and Talk with Tsubomi, close the game, then import on the Runtime UI tab. Gameplay is never launched automatically.

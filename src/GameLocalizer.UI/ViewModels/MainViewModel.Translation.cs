@@ -1,9 +1,10 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using GameLocalizer.Core.Models;
 using GameLocalizer.UI.Views;
+using GameLocalizer.UI.Commands;
 namespace GameLocalizer.UI.ViewModels;
 
 public sealed partial class MainViewModel
@@ -47,24 +48,58 @@ public sealed partial class MainViewModel
             if (!offlineSettings.Ready) { Status = offlineSettings.Status; return; }
         }
         ct.ThrowIfCancellationRequested();
-        TranslationJobProgress? last = null;
-        void ShowUsage()
-        {
-            if (!IsCurrent(op)) return;
-            var job = last?.Job;
-            ProgressText = $"RAM приложения + модели: {(Process.GetCurrentProcess().PrivateMemorySize64 + workspace.ModelMemoryBytes) / 1048576:N0} MiB · GPU usage: недоступно · Model loaded: {workspace.IsModelLoaded}\nBatch: {last?.CurrentBatch ?? 0} · {job?.TranslatedStrings + job?.CachedStrings ?? 0:N0} / {job?.TotalStrings ?? preflight.TotalStrings:N0} · {last?.Device ?? Settings.Offline.Device.ToString()}";
-        }
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) }; timer.Tick += (_, _) => ShowUsage(); timer.Start();
-        var progress = new Progress<TranslationJobProgress>(p => { last = p; ShowUsage(); });
-        TranslationJob result;
-        try { result = await Task.Run(() => workspace.RunTranslationJobAsync(op.Game, op.Session, ignore, selected == "Тест 20 строк", progress, ct), ct); }
-        finally { timer.Stop(); ShowUsage(); }
-        if (!IsCurrent(op)) return;
-        Status = $"{result.Status}: переведено {result.TranslatedStrings:N0}, из памяти/готово {result.CachedStrings:N0}, ошибок {result.FailedStrings:N0}, отменено {result.CancelledStrings:N0}. Результаты сохранены. Проверьте Preview.";
+        await ExecuteTranslationJobAsync(op, ignore, selected == "Тест 20 строк", false, ct);
         if (selected == "Тест 20 строк" && !ct.IsCancellationRequested)
         {
             var rows = await workspace.GetTestRowsAsync(op.Session, ct);
             if (IsCurrent(op)) new TranslationTestWindow(rows) { Owner = Application.Current.MainWindow }.ShowDialog();
         }
     });
+    private TranslationJob? currentTranslationJob;
+    private bool translating;
+    public TranslationJob? CurrentTranslationJob => currentTranslationJob;
+    public bool IsTranslating => translating;
+    public double TranslationProgressPercent => currentTranslationJob?.ProgressPercent ?? 0;
+    public string TranslationProgressText => currentTranslationJob is {} j ? $"Обработано {j.ProcessedCount:N0}/{j.TotalStrings:N0} · {j.ProgressPercent:F1}%" : "Подготовка перевода…";
+    public bool HasTranslationIssues => HasTranslationFailures || currentTranslationJob?.SkippedStrings > 0;
+    public bool HasTranslationFailures => currentTranslationJob?.FailedStrings > 0;
+    public string TranslationOutcomeSummary => currentTranslationJob is {} j ? $"Переведено: {j.Successful:N0} · Ошибок: {j.FailedStrings:N0} · Пропущено: {j.SkippedStrings:N0}" : "";
+    public string TranslationDiagnosticText { get; private set; } = "";
+    public ICommand RetryFailedCommand => retryFailedCommand ??= new AsyncCommand(RetryFailedAsync, () => Idle && session != null && HasTranslationFailures);
+    public ICommand ShowTranslationErrorsCommand => showTranslationErrorsCommand ??= new AsyncCommand(ShowTranslationErrorsAsync, () => Idle && session != null);
+    private ICommand? retryFailedCommand, showTranslationErrorsCommand;
+    public Task RetryFailedAsync() => Run(async (op, ct) => {
+        if(op.Game == null || op.Session == null) return;
+        await FlushEditsAsync(); await ExecuteTranslationJobAsync(op, false, false, true, ct);
+    });
+    public async Task ShowTranslationErrorsAsync() {
+        IsTranslation = true; Search = ""; FileFilter = ""; MinimumConfidence = 0;
+        Filter = "Все"; Mode = "Ошибки перевода"; PreviewTabIndex = 0;
+        PreviewTask = RefreshPreviewAsync(); await PreviewTask;
+    }
+    private void NotifyTranslationJob() {
+        foreach(var name in new[]{nameof(CurrentTranslationJob),nameof(IsTranslating),nameof(TranslationProgressPercent),nameof(TranslationProgressText),nameof(HasTranslationFailures),nameof(HasTranslationIssues),nameof(TranslationOutcomeSummary),nameof(TranslationDiagnosticText)}) Changed(name);
+        NotifyWorkflow();
+    }
+    private async Task ExecuteTranslationJobAsync(Operation op, bool ignore, bool test, bool failedOnly, CancellationToken ct) {
+        if(op.Game == null || op.Session == null) return;
+        translating = true; currentTranslationJob = null; NotifyTranslationJob();
+        void Accept(TranslationJobProgress p) {
+            if(!IsCurrent(op)) return;
+            currentTranslationJob = p.Job;
+            TranslationDiagnosticText = $"Job: {p.Job.JobId} · Batch: {p.CurrentBatch} · Device: {p.Device} · RAM: {p.RamBytes / 1048576:N0} MiB";
+            ProgressText = TranslationProgressText; NotifyTranslationJob();
+        }
+        var progress = new Progress<TranslationJobProgress>(Accept);
+        try {
+            var result = await Task.Run(() => workspace.RunTranslationJobAsync(op.Game, op.Session, ignore, test, progress, ct, failedOnly), ct);
+            if(!IsCurrent(op)) return;
+            currentTranslationJob = result;
+            var label = result.Status switch { TranslationJobStatus.Completed => "Перевод завершён", TranslationJobStatus.PartiallyCompleted => "Перевод завершён с ошибками", TranslationJobStatus.Cancelled => "Перевод отменён", _ => "Перевод завершился с ошибкой" };
+            Status = $"{label}. {TranslationOutcomeSummary}. Результаты сохранены.";
+            ProgressText = TranslationProgressText;
+        }
+        finally { translating = false; NotifyTranslationJob(); }
+    }
+
 }

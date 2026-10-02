@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
 using GameLocalizer.Core.Localization;
@@ -19,12 +19,12 @@ public sealed class ScanRegressionTests : IDisposable
     public void Dispose() { Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools(); Directory.Delete(root, true); }
     private string Write(string name, string text) { var path = Path.Combine(root, name); Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllText(path, text, new UTF8Encoding(false)); return path; }
     private ScanPipeline Pipeline() => new(new ResourceScanner(Adapters()), Adapters(), NullLogger<ScanPipeline>.Instance);
-    internal static ScanWorkspaceService Workspace(ScanResultRepository repository, string memoryPath)
+    internal static ScanWorkspaceService Workspace(ScanResultRepository repository, string memoryPath, ITranslationProvider? provider = null, TranslationJobStore? jobs = null)
     {
         var adapters = Adapters();
         return new(new(new(adapters), adapters, NullLogger<ScanPipeline>.Instance), repository,
-            new(new MockTranslationProvider(), new TranslationMemoryService(memoryPath), NullLogger<TranslationService>.Instance),
-            new(NullLogger<BackupService>.Instance), adapters);
+            new(provider ?? new MockTranslationProvider(), new TranslationMemoryService(memoryPath), NullLogger<TranslationService>.Instance),
+            new(NullLogger<BackupService>.Instance), adapters, jobs);
     }
     [Theory]
     [InlineData("true")][InlineData("false")][InlineData("null")][InlineData("yes")][InlineData("no")][InlineData("TRUE")]

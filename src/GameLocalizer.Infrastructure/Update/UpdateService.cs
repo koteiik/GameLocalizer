@@ -1,4 +1,4 @@
-using System.Net.Http;
+﻿using System.Net.Http;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using GameLocalizer.Core.Models;
@@ -6,6 +6,7 @@ namespace GameLocalizer.Infrastructure.Update;
 
 public sealed class SettingsService(string directory)
 {
+    public string DataDirectory => directory;
     public AppSettings Load()
     {
         try { return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(Path.Combine(directory, "settings.json"))) ?? new(); }

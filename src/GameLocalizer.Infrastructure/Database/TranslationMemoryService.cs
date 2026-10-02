@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.Json;
 namespace GameLocalizer.Infrastructure.Database;
 
-public sealed class TranslationMemoryService(string databasePath) : ITranslationMemoryService
+public sealed partial class TranslationMemoryService(string databasePath) : ITranslationMemoryService
 {
     private readonly SemaphoreSlim gate = new(1, 1);
     private bool initialized;

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using GameLocalizer.Core.Models;
@@ -31,7 +31,7 @@ public sealed partial class MainViewModel
             if(version!=selectionVersion || !ReferenceEquals(selected,game))return;
             UnsupportedUi.Clear();foreach(var row in unsupported)UnsupportedUi.Add(row);Changed(nameof(CoverageSummary));
             ScanStatus=changes>0?"STALE":"CACHED";
-            selected.Status=changes>0?$"Обнаружены изменения: {changes} файла":"Последний анализ актуален";
+            NotifyApplyState();
             Status=$"Кэш анализа загружен. Найдено строк: {TotalCount:N0} · Пользовательский текст: {userTextCount:N0} · Переведено: {snapshot.Translated:N0}\nПоследний анализ: {snapshot.Timestamp.LocalDateTime:g}. "+selected.Status;
         }
         catch(Exception e) when(e is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException or InvalidDataException or FormatException or System.Text.Json.JsonException)
@@ -50,6 +50,8 @@ public sealed partial class MainViewModel
     {
         var snapshot=await workspace.LoadAnalysisAsync(owner,ct);
         if(snapshot!=null)await workspace.RefreshAppliedStampsAsync(owner,snapshot.Session,false,ct);
-        applyNeedsAnalysis=false;
+        applyNeedsAnalysis=false; applyResult=null;
+        await applyStates.SaveAsync(new(){Root=owner.Path,State=GameLocalizer.Infrastructure.FileSystem.GameApplyState.ReadyToApply});
+        NotifyApplyState();
     }
 }

@@ -1,4 +1,4 @@
-using GameLocalizer.Core.Models;
+﻿using GameLocalizer.Core.Models;
 using GameLocalizer.Core.Validation;
 using Microsoft.Data.Sqlite;
 
@@ -104,7 +104,7 @@ public sealed partial class ScanResultRepository(string databasePath, bool persi
         Bind(command, session); command.Parameters.AddWithValue("$min", query.MinimumConfidence);
         command.Parameters.AddWithValue("$search", query.Search); command.Parameters.AddWithValue("$file", query.File); command.Parameters.AddWithValue("$status", query.Status);
         command.Parameters.AddWithValue("$filter", query.Filter);
-        return "Session=$session AND (($filter IN ('Сомнительные','Технические','Пустые переводы','Пропущенные UI','Unsupported UI')) OR Confidence >= $min) AND (CASE $filter WHEN 'Пустые переводы' THEN Selected=1 AND gl_empty(Translation) AND Category NOT IN ('Technical','UnsupportedUI') WHEN 'Пропущенные UI' THEN Selected=0 AND Category IN ('UI','ShortUI','Localization') AND Confidence>=0.60 WHEN 'Short UI' THEN Category='ShortUI' WHEN 'UI' THEN Category IN ('UI','ShortUI') WHEN 'Localization' THEN Category='Localization' WHEN 'Unsupported UI' THEN Category='UnsupportedUI' WHEN 'Технические' THEN Category='Technical' WHEN 'Сомнительные' THEN Category NOT IN ('Technical','UnsupportedUI') AND (Confidence<0.85 OR Category NOT IN ('ShortUI','UI','Dialogue','Subtitle','Localization','Quest','Item','Story')) WHEN 'Выбранные' THEN Selected=1 WHEN 'Высокая уверенность' THEN Category IN ('ShortUI','UI','Dialogue','Subtitle','Localization','Quest','Item','Story') AND Confidence>=0.85 ELSE Category NOT IN ('Technical','UnsupportedUI') AND Confidence>=0.60 END) AND ($status='Все' OR Status=$status) AND ($file='' OR gl_contains(FilePath,$file)) AND ($search='' OR gl_contains(Original,$search) OR gl_contains(Translation,$search) OR gl_contains(EntryKey,$search))";
+        return "Session=$session AND (($filter IN ('Сомнительные','Технические','Пустые переводы','Пропущенные UI','Unsupported UI')) OR Confidence >= $min) AND (CASE $filter WHEN 'Пустые переводы' THEN Selected=1 AND gl_empty(Translation) AND Category NOT IN ('Technical','UnsupportedUI') WHEN 'Пропущенные UI' THEN Selected=0 AND Category IN ('UI','ShortUI','Localization') AND Confidence>=0.60 WHEN 'Short UI' THEN Category='ShortUI' WHEN 'UI' THEN Category IN ('UI','ShortUI') WHEN 'Localization' THEN Category='Localization' WHEN 'Unsupported UI' THEN Category='UnsupportedUI' WHEN 'Технические' THEN Category='Technical' WHEN 'Сомнительные' THEN Category NOT IN ('Technical','UnsupportedUI') AND (Confidence<0.85 OR Category NOT IN ('ShortUI','UI','Dialogue','Subtitle','Localization','Quest','Item','Story')) WHEN 'Выбранные' THEN Selected=1 WHEN 'Высокая уверенность' THEN Category IN ('ShortUI','UI','Dialogue','Subtitle','Localization','Quest','Item','Story') AND Confidence>=0.85 ELSE Category NOT IN ('Technical','UnsupportedUI') AND (Confidence>=0.60 OR $status='Ошибки перевода') END) AND ($status='Все' OR Status=$status OR ($status='Ошибки перевода' AND Status IN ('Failed','ValidationError'))) AND ($file='' OR gl_contains(FilePath,$file)) AND ($search='' OR gl_contains(Original,$search) OR gl_contains(Translation,$search) OR gl_contains(EntryKey,$search))";
     }
     private static ScanRow Read(SqliteDataReader r) => new(r.GetInt64(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5), r.GetDouble(6), r.GetBoolean(7), r.GetString(8), Enum.Parse<TextCategory>(r.GetString(9))) { PhysicalSourceFile = r.GetString(10), LocalizationSlot = r.GetString(11), AdapterType = r.GetString(12), StableRowId=r.GetString(13), ManualEdit=r.GetBoolean(14), Applied=r.GetBoolean(15), TranslationSource=r.GetString(16) };
     private const string Columns = "Id,FilePath,EntryKey,Original,Translation,Context,Confidence,Selected,Status,Category,PhysicalSourceFile,LocalizationSlot,AdapterType,StableRowId,ManualEdit,Applied,TranslationSource";
@@ -152,6 +152,13 @@ public sealed partial class ScanResultRepository(string databasePath, bool persi
         using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$id", afterId);
         cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Category NOT IN ('Technical','UnsupportedUI') AND Selected=1 AND Id>$id {(onlyUntranslated ? "AND Status NOT IN ('Translated','FromMemory','Manual')" : "")} ORDER BY Id LIMIT 1000";
         using var r = cmd.ExecuteReader(); var result = new List<ScanRow>(); while (r.Read()) { ct.ThrowIfCancellationRequested(); result.Add(Read(r)); } return result;
+    }, ct);
+    public Task<IReadOnlyList<ScanRow>> ReadFailedAsync(string session, long afterId, CancellationToken ct) => Run<IReadOnlyList<ScanRow>>(db =>
+    {
+        using var cmd = db.CreateCommand(); Bind(cmd, session); cmd.Parameters.AddWithValue("$id", afterId);
+        cmd.CommandText = $"SELECT {Columns} FROM ScanRows WHERE Session=$session AND Selected=1 AND Category NOT IN ('Technical','UnsupportedUI') AND Id>$id AND Status IN ('Failed','ValidationError') AND ManualEdit=0 AND Applied=0 AND gl_empty(Translation) AND TranslationSource NOT IN ('Manual','Memory') ORDER BY Id LIMIT 1000";
+        using var reader = cmd.ExecuteReader(); var rows = new List<ScanRow>();
+        while(reader.Read()) { ct.ThrowIfCancellationRequested(); rows.Add(Read(reader)); } return rows;
     }, ct);
     public Task<IReadOnlyList<ScannedFile>> SelectedFilesAsync(string session, CancellationToken ct) => SelectedFilesAsync(session, false, ct);
     public Task<IReadOnlyList<ScannedFile>> SelectedFilesAsync(string session, bool skipEmpty, CancellationToken ct) => Run<IReadOnlyList<ScannedFile>>(db =>

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -53,7 +53,7 @@ public sealed partial class MainViewModel : Observable
     public AppSettings Settings { get; }
     public string WindowTitle => "GameLocalizer " + ApplicationVersion.Label;
     public string VersionDescription => ApplicationVersion.Label + " · Русская локализация игр · Ранний MVP";
-    public string[] Modes { get; } = ["Все", .. Enum.GetNames<TranslationStatus>()];
+    public string[] Modes { get; } = ["Все", "Ошибки перевода", .. Enum.GetNames<TranslationStatus>()];
     public string[] Filters { get; } = ["Все", "Выбранные", "Высокая уверенность", "Сомнительные", "Технические", "UI", "Short UI", "Localization", "Unsupported UI", "Пропущенные UI", "Пустые переводы"];
     public string Filter { get => filter; set { if (filter == value) return; Set(ref filter, value); PreviewTabIndex = value == "Unsupported UI" ? 2 : 0; FilterChanged(); } }
     public ScanSort[] Sorts { get; } = Enum.GetValues<ScanSort>();
@@ -70,8 +70,8 @@ public sealed partial class MainViewModel : Observable
             pageCancellation?.Cancel();
             EditSaveTask = SaveEditsSafelyAsync();
             Set(ref game, value);
-            RefreshDiagnosticReport();
-            session = null;
+            RefreshDiagnosticReport(); RefreshCollector();
+            session = null; applyResult=null;
             ClearPreview();
             Resources.Clear(); UnsupportedUi.Clear(); UiSearchResults.Clear(); applyNeedsAnalysis = false; uiFound = shortUiFound = uiSelected = missedUi = 0; Changed(nameof(CoverageSummary));
             Engine = value?.Engine ?? "Unknown";
@@ -105,7 +105,8 @@ public sealed partial class MainViewModel : Observable
     public string ProgressText { get => progressText; private set { Set(ref progressText, value); Changed(nameof(ProgressSummary)); } }
     public string Search { get => search; set { if (search == value) return; Set(ref search, value); FilterChanged(); } }
     public string FileFilter { get => fileFilter; set { if (fileFilter == value) return; Set(ref fileFilter, value); FilterChanged(); } }
-    public string Mode { get => mode; set { if (mode == value) return; Set(ref mode, value); FilterChanged(); } }
+    public bool ShowingTranslationErrors => Mode == "Ошибки перевода";
+    public string Mode { get => mode; set { if (mode == value) return; Set(ref mode, value); Changed(nameof(ShowingTranslationErrors)); FilterChanged(); } }
     public double MinimumConfidence { get => minimumConfidence; set { if (minimumConfidence == value) return; Set(ref minimumConfidence, value); FilterChanged(); } }
     public ScanSort Sort { get => sort; set { Set(ref sort, value); FilterChanged(); } }
     public bool Descending { get => descending; set { Set(ref descending, value); FilterChanged(); } }
@@ -136,13 +137,15 @@ public sealed partial class MainViewModel : Observable
 
     public MainViewModel(IGameDiscoveryService discovery, IEngineDetector detector, ResourceScanner scanner,
         ScanResultRepository repository, ScanWorkspaceService workspace, BackupService backup,
-        SettingsService settingsService, UpdateService updater, ILogger<MainViewModel> logger, AppSettings? applicationSettings = null, OfflineSettingsViewModel? offlineSettings = null, GlossaryService? glossary = null, ApplyDiagnosticReportLocator? diagnosticReports = null, Func<ApplySelectionSummary, string>? emptyTranslationChoice = null, Func<string, bool>? confirmApply = null, UiResourceDiscovery? uiDiscovery = null, ScanDiagnosticLog? scanDiagnostics = null)
+        SettingsService settingsService, UpdateService updater, ILogger<MainViewModel> logger, AppSettings? applicationSettings = null, OfflineSettingsViewModel? offlineSettings = null, GlossaryService? glossary = null, ApplyDiagnosticReportLocator? diagnosticReports = null, Func<ApplySummary, ApplySummaryDecision>? applySummaryChoice = null, UiResourceDiscovery? uiDiscovery = null, ScanDiagnosticLog? scanDiagnostics = null, GameLocalizer.Infrastructure.Runtime.RuntimeDictionaryService? runtimeDictionary = null)
     {
+        this.runtimeDictionary = runtimeDictionary;
         this.scanDiagnostics = scanDiagnostics ?? new(); this.uiDiscovery = uiDiscovery ?? workspace.CreateUiDiscovery(this.scanDiagnostics);
-        this.emptyTranslationChoice = emptyTranslationChoice; this.confirmApply = confirmApply;
+        this.applySummaryChoice = applySummaryChoice;
         this.diagnosticReports = diagnosticReports ?? new();
         this.discovery = discovery; this.detector = detector; this.scanner = scanner; this.repository = repository;
         this.workspace = workspace; this.backup = backup; this.settingsService = settingsService; this.updater = updater; this.logger = logger;
+        applyStates = new ApplyStateStore(Path.Combine(settingsService.DataDirectory,"ApplyStates"));
         Settings = applicationSettings ?? settingsService.Load(); this.offlineSettings = offlineSettings; this.glossary = glossary;
         var installation = new InstallationInfoService().GetInfo();
         Updates = new UpdateViewModel(new ReleaseClient(installed: installation.Installed), () => Busy || offlineSettings?.Busy == true, async () => { await ShutdownAsync(); workspace.UnloadModel(); }, installation);
@@ -150,6 +153,7 @@ public sealed partial class MainViewModel : Observable
         PropertyChanged += (_, e) => { if (e.PropertyName == nameof(Busy)) Updates.RefreshAvailability(); };
         if (offlineSettings != null) offlineSettings.PropertyChanged += (_, _) => { Changed(nameof(ProviderDescription)); Updates.RefreshAvailability(); };
         foreach (var manual in Settings.ManualGames.Where(g => Directory.Exists(g.Path))) Games.Add(manual);
+        InitializeCollectorCommands();
         InitializeCommand = new AsyncCommand(RefreshGamesAsync, () => Idle);
         AddCommand = new RelayCommand(AddFolder, () => Idle);
         AnalyzeCommand = new AsyncCommand(AnalyzeSelectedAsync, () => Idle && HasGame);
@@ -175,7 +179,7 @@ public sealed partial class MainViewModel : Observable
         SettingsCommand = new RelayCommand(() =>
         {
             var profile = workspace.Profile; workspace.UnloadModel();
-            new SettingsWindow(Settings, offlineSettings, glossary) { Owner = Application.Current.MainWindow }.ShowDialog();
+            new SettingsWindow(Settings, offlineSettings, glossary, resetPanel: () => PanelLayout.Reset()) { Owner = Application.Current.MainWindow }.ShowDialog();
             if (profile != workspace.Profile) { session = null; ClearPreview(); Status = "Настройки переводчика/glossary изменены. Нажмите «Найти текст»: ручные переводы сохраняются."; }
             Changed(nameof(ProviderDescription));
             try { settingsService.Save(Settings); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = e.Message; }
@@ -186,6 +190,7 @@ public sealed partial class MainViewModel : Observable
         ClearVisibleCommand = new RelayCommand(() => { foreach (var row in Rows) row.Selected = false; }, () => Idle);
         NextPageCommand = new AsyncCommand(() => ChangePageAsync(pageIndex + 1), () => Idle && ((long)pageIndex + 1) * ScanResultRepository.PageSize < MatchingCount);
         PreviousPageCommand = new AsyncCommand(() => ChangePageAsync(pageIndex - 1), () => Idle && pageIndex > 0);
+        InitializeShell();
     }
     private void AddFolder()
     {
@@ -305,15 +310,14 @@ public sealed partial class MainViewModel : Observable
     {
         if (op.Game == null || op.Session == null) return;
         await FlushEditsAsync(); ct.ThrowIfCancellationRequested();
-        var progress = new Progress<long>(count => { if (IsCurrent(op)) ProgressText = $"Переведено строк: {count:N0} из выбранных на всех страницах"; });
-        await Task.Run(() => workspace.TranslateAsync(op.Game, op.Session, progress, ct), ct);
-        if (IsCurrent(op)) Status = "Перевод сохранён в памяти и Preview. Проверьте результат перед применением.";
+        await ExecuteTranslationJobAsync(op, false, false, false, ct);
     });
     private ScanQuery Query() => new(Search, FileFilter, Mode, MinimumConfidence, Sort, Descending, Filter);
     private void ClearPreview()
     {
         pageVersion++; Rows.Clear(); pageIndex = 0; TotalCount = MatchingCount = SelectedCount = 0; userTextCount = doubtfulCount = technicalCount = 0;
         Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));
+        translationReady = false; translationApplied = false; currentTranslationJob = null; NotifyTranslationJob();
     }
     private void FilterChanged() { pageIndex = 0; PreviewTask = RefreshPreviewAsync(true); }
     public Task ChangePageAsync(int index)
@@ -334,10 +338,15 @@ public sealed partial class MainViewModel : Observable
             await FlushEditsAsync(); token.ThrowIfCancellationRequested();
             var result = await repository.QueryAsync(activeSession, query, page, token);
             if (request != pageVersion || version != selectionVersion || session != activeSession) return;
+            if(currentTranslationJob == null && game != null) {
+                var saved = workspace.FindLatestJob(game);
+                if(saved != null && (saved.SessionId == activeSession || saved.SessionId == "")) currentTranslationJob = saved;
+            }
             Rows.Clear();
             foreach (var item in result.Rows)
             {
-                var row = new TranslationRow { Id = item.Id, Original = item.Original, File = item.FilePath, PhysicalSourceFile = item.PhysicalSourceFile.Length > 0 ? item.PhysicalSourceFile : Path.Combine(game!.Path, item.FilePath), LocalizationSlot = item.LocalizationSlot, Key = item.DisplayKey, Context = item.Context,
+                var error = currentTranslationJob?.SessionId == activeSession ? currentTranslationJob.Errors.FirstOrDefault(e => e.RowId == item.Id) : null;
+                var row = new TranslationRow { ErrorType = error?.ErrorType ?? (item.Status is "Failed" or "ValidationError" ? item.Status : ""), ErrorMessage = error?.Message ?? (item.Status is "Failed" or "ValidationError" ? "Причина не сохранена в предыдущем задании" : ""), RetryStatus = error?.RetryStatus ?? (item.Status is "Failed" or "ValidationError" ? "Ожидает повтора" : ""), Id = item.Id, Original = item.Original, File = item.FilePath, PhysicalSourceFile = item.PhysicalSourceFile.Length > 0 ? item.PhysicalSourceFile : Path.Combine(game!.Path, item.FilePath), LocalizationSlot = item.LocalizationSlot, Key = item.DisplayKey, Context = item.Context,
                     Category = item.Category, Confidence = item.Confidence, Applied = item.Applied, Selected = item.Selected, Russian = item.Translation, State = Enum.TryParse<TranslationStatus>(item.Status, out var state) ? state : TranslationStatus.NotTranslated };
                 var lastSelected = row.Selected;
                 row.PropertyChanged += (_, e) =>
@@ -355,6 +364,7 @@ public sealed partial class MainViewModel : Observable
             TotalCount = Busy ? Math.Max(TotalCount, result.Total) : result.Total;
             MatchingCount = result.Matching; SelectedCount = Busy ? Math.Max(SelectedCount, result.Selected) : result.Selected;
             Changed(nameof(Counters)); Changed(nameof(PageSummary)); Changed(nameof(PageIndex));
+            await RefreshShellAsync();
         }
         catch (OperationCanceledException) { }
         catch (Exception e)
@@ -390,11 +400,13 @@ public sealed partial class MainViewModel : Observable
             foreach (var item in pending) if (edits.TryGetValue(item.Key, out var current) && current == item.Value) edits.Remove(item.Key);
         }
         finally { editGate.Release(); }
+        await RefreshShellAsync();
     }
     public async Task ShutdownAsync()
     {
+        applyWatch?.Stop();
         pageCancellation?.Cancel(); editCancellation?.Cancel();
-        await AnalysisLoadTask; await PreviewTask; await EditSaveTask; await FlushEditsAsync(); workspace.UnloadModel();
+        await RuntimeEditSaveTask; await AnalysisLoadTask; await PreviewTask; await EditSaveTask; await FlushEditsAsync(); workspace.UnloadModel();
     }
     internal static void Open(string url)
     {

@@ -29,6 +29,25 @@ public record TranslationPreflight(long TotalStrings, long CachedStrings, long M
 }
 public sealed class TranslationJob
 {
+    public string SessionId { get; set; } = "";
+    public long SkippedStrings { get; set; }
+    public List<TranslationJobError> Errors { get; set; } = [];
+    public long Successful => TranslatedStrings + CachedStrings;
+    public long ProcessedCount => Math.Min(TotalStrings, Successful + FailedStrings + SkippedStrings + CancelledStrings);
+    public bool IsRunning => Status is TranslationJobStatus.Pending or TranslationJobStatus.Running;
+    public double ProgressPercent => TotalStrings == 0 ? (IsRunning ? 0 : 100) : 100d * ProcessedCount / TotalStrings;
+    public void FinalizeJob(bool cancelled = false, bool criticalFailure = false)
+    {
+        var remaining = Math.Max(0, TotalStrings - ProcessedCount);
+        if (cancelled) { CancelledStrings += remaining; Status = TranslationJobStatus.Cancelled; }
+        else if (criticalFailure) { FailedStrings += remaining; Status = TranslationJobStatus.Failed; }
+        else
+        {
+            SkippedStrings += remaining;
+            Status = Successful == 0 && TotalStrings > 0 ? TranslationJobStatus.Failed : FailedStrings + SkippedStrings + CancelledStrings > 0 ? TranslationJobStatus.PartiallyCompleted : TranslationJobStatus.Completed;
+        }
+        FinishedAt = DateTimeOffset.UtcNow;
+    }
     public string Device { get; set; } = "CPU";
     public bool TestOnly { get; set; }
     public string JobId { get; set; } = Guid.NewGuid().ToString("N");
@@ -44,5 +63,6 @@ public sealed class TranslationJob
     public long CancelledStrings { get; set; }
     public TranslationJobStatus Status { get; set; } = TranslationJobStatus.Pending;
 }
+public record TranslationJobError(long RowId, string Original, string Source, string ErrorType, string Message, string RetryStatus = "Ожидает повтора");
 public record TranslationJobProgress(TranslationJob Job, int CurrentBatch, bool ModelLoaded, string Device, long RamBytes);
 public record GlossaryEntry(string Original, string Russian, bool CaseSensitive = true, string? Category = null);

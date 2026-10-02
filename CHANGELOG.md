@@ -6,6 +6,19 @@
 ### Changed
 ### Fixed
 
+## [0.5.0]
+
+### Added
+- Redesigned sidebar/library workflow, dockable selected-game panel, contextual main action and asynchronous local Steam/executable artwork with persistent cache.
+- Unity Mono / BepInEx 5 Runtime UI Collector, pre-generated Runtime Translation Dictionary and supported offline UI/dialogue replacement during gameplay.
+- Runtime UI glossary, context and quality review/reprocessing, plus optional bounded dialogue diagnostics.
+
+### Fixed
+- Translation job finalization and persistent Apply success/failure/partial states, verified partial retry and external-change invalidation.
+- One Apply summary integrates empty-row skips and combined-translation consent.
+- Applied requires disk/parser, manifest/ownership and backup verification; already-correct owned files are verified without rewriting.
+- Release builds use pinned compile-only collector references without requiring an installed game. Runtime/dialogue coverage remains game-dependent and incomplete.
+
 ## [0.3.0]
 
 ### Added

@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using GameLocalizer.Core.Models;
@@ -9,10 +9,13 @@ namespace GameLocalizer.UI.Views;
 
 public sealed class SettingsWindow : Window
 {
-    public SettingsWindow(AppSettings settings, OfflineSettingsViewModel? offline = null, GlossaryService? glossary = null)
+    public SettingsWindow(AppSettings settings, OfflineSettingsViewModel? offline = null, GlossaryService? glossary = null, Action? embeddedSave = null, Action? resetPanel = null)
     {
         Style = (Style)FindResource(typeof(Window)); Title = "Настройки → Offline Translation → Models"; Width = 760; Height = 780; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var panel = new StackPanel { Margin = new Thickness(24) }; Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var resetLayout = new Button { Content = "Сбросить расположение панели", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0,0,0,16) };
+        resetLayout.Click += (_, _) => resetPanel?.Invoke();
+        if (resetPanel != null) panel.Children.Add(resetLayout);
         panel.Children.Add(new TextBlock { Text = "Переводчик · EN → RU", FontSize = 22 });
         var providers = new ComboBox { ItemsSource = new[] { "Offline", "Mock" }, SelectedItem = settings.TranslationProvider, Margin = new Thickness(4) }; panel.Children.Add(providers);
         if (offline != null)
@@ -21,6 +24,7 @@ public sealed class SettingsWindow : Window
             var modelPanel = new StackPanel { DataContext = offline }; panel.Children.Add(modelPanel);
             var state = new TextBlock { FontWeight = FontWeights.Bold }; state.SetBinding(TextBlock.TextProperty, new Binding("ReadyDescription")); modelPanel.Children.Add(state);
             var hardware = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 8) }; hardware.SetBinding(TextBlock.TextProperty, new Binding("HardwareText")); modelPanel.Children.Add(hardware);
+            modelPanel.Children.Add(new TextBlock { Text = "Производительность", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0,20,0,10) });
             var options = new WrapPanel(); modelPanel.Children.Add(options);
             options.Children.Add(new TextBlock { Text = "Device", VerticalAlignment = VerticalAlignment.Center });
             var devices = new ComboBox { ItemsSource = offline.Devices, Width = 120 }; devices.SetBinding(ComboBox.SelectedItemProperty, new Binding("Settings.Device") { Mode = BindingMode.TwoWay }); options.Children.Add(devices);
@@ -37,7 +41,7 @@ public sealed class SettingsWindow : Window
                 settings.TranslationProvider = providers.SelectedItem?.ToString() ?? "Offline";
                 if (settings.TranslationProvider == "Offline" && !offline.IsInstalled)
                 {
-                    var choice = new ChoiceWindow("Локальная модель EN → RU", "Для офлайн-перевода требуется локальная модель EN → RU.\n\n" + offline.ModelInfo, "Скачать модель", "Отмена") { Owner = this };
+                    var choice = new ChoiceWindow("Локальная модель EN → RU", "Для офлайн-перевода требуется локальная модель EN → RU.\n\n" + offline.ModelInfo, "Скачать модель", "Отмена") { Owner = Application.Current?.MainWindow };
                     if (choice.ShowDialog() == true) offline.DownloadCommand.Execute(null);
                 }
             };
@@ -45,11 +49,13 @@ public sealed class SettingsWindow : Window
         }
         else providers.SelectionChanged += (_, _) => settings.TranslationProvider = providers.SelectedItem?.ToString() ?? "Mock";
         panel.Children.Add(new TextBlock { Text = "Модель загружается только при переводе. После Apply игра читает сохранённые файлы; GameLocalizer можно закрыть. Mock — только демонстрация.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 15, 0, 15) });
-        if (glossary != null) { var button = new Button { Content = "Glossary / Names · импорт и экспорт CSV / JSON" }; button.Click += (_, _) => new GlossaryWindow(glossary) { Owner = this }.ShowDialog(); panel.Children.Add(button); }
+        panel.Children.Add(new TextBlock { Text = "Словарь и имена", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0,20,0,10) });
+        if (glossary != null) { var button = new Button { Content = "Glossary / Names · импорт и экспорт CSV / JSON" }; button.Click += (_, _) => new GlossaryWindow(glossary) { Owner = Application.Current?.MainWindow }.ShowDialog(); panel.Children.Add(button); }
+        panel.Children.Add(new TextBlock { Text = "Диагностика и обновления", FontSize = 18, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0,20,0,10) });
         var trace = new CheckBox { Content = "Diagnostic Apply Trace", IsChecked = settings.DiagnosticApplyTrace }; trace.Click += (_, _) => settings.DiagnosticApplyTrace = trace.IsChecked == true; panel.Children.Add(trace);
         var updates = new CheckBox { Content = "Проверять обновления при запуске", IsChecked = settings.CheckUpdatesOnStartup }; updates.Click += (_, _) => settings.CheckUpdatesOnStartup = updates.IsChecked == true; panel.Children.Add(updates);
         panel.Children.Add(new TextBlock { Text = "GitHub repository:" }); var repository = new TextBox { Text = settings.GitHubRepository }; panel.Children.Add(repository);
-        var save = new Button { Content = "Сохранить и закрыть" }; panel.Children.Add(save);
-        save.Click += (_, _) => { if (!UpdateService.ValidRepository(repository.Text)) { MessageBox.Show("Введите owner/repository"); return; } settings.GitHubRepository = repository.Text; Close(); };
+        var save = new Button { Content = embeddedSave == null ? "Сохранить и закрыть" : "Сохранить настройки" }; panel.Children.Add(save);
+        save.Click += (_, _) => { if (!UpdateService.ValidRepository(repository.Text)) { MessageBox.Show("Введите owner/repository"); return; } settings.GitHubRepository = repository.Text; if(embeddedSave != null) embeddedSave(); else Close(); };
     }
 }

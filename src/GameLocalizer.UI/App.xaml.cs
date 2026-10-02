@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.IO;
 using GameLocalizer.Core.Detection;
 using GameLocalizer.Core.Interfaces;
@@ -46,6 +46,9 @@ public partial class App : Application
         collection.AddSingleton(new TranslationJobStore(Path.Combine(data, "jobs")));
         collection.AddSingleton<OfflineSettingsViewModel>();
         collection.AddSingleton<ITranslationMemoryService>(new TranslationMemoryService(Path.Combine(data, "memory.db")));
+        collection.AddSingleton(sp => new GameLocalizer.Infrastructure.Runtime.RuntimeDictionaryService(
+            new TranslationService(sp.GetRequiredService<LocalOfflineTranslationProvider>(), sp.GetRequiredService<ITranslationMemoryService>(), sp.GetRequiredService<ILogger<TranslationService>>(), sp.GetRequiredService<GlossaryService>()),
+            (TranslationMemoryService)sp.GetRequiredService<ITranslationMemoryService>()));
         collection.AddSingleton<TranslationService>(); collection.AddSingleton(settingsService); collection.AddSingleton<UpdateService>();
         collection.AddSingleton<MainViewModel>();
         services = collection.BuildServiceProvider();

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using GameLocalizer.Core.Validation;
 using GameLocalizer.Core.Models;
@@ -11,6 +11,9 @@ public abstract class Observable : INotifyPropertyChanged
 }
 public sealed class TranslationRow : Observable
 {
+    public string ErrorType { get; init; } = "";
+    public string ErrorMessage { get; init; } = "";
+    public string RetryStatus { get; init; } = "";
     public long Id { get; init; }
     public required string Original { get; init; }
     public required string File { get; init; }
@@ -18,7 +21,7 @@ public sealed class TranslationRow : Observable
     public bool Applied { get; init; }
     public string FileToolTip => PhysicalSourceFile.Length > 0 ? PhysicalSourceFile : File;
     public string FileName => System.IO.Path.GetFileName(File);
-    public string StatusLabel => Applied ? "Применено" : Status switch { "FromMemory" => "Память", "Translated" => "Переведено", "Manual" => "Вручную", "SourceChanged" => "Источник изменён", "ValidationError" or "Failed" => "Ошибка", "NotTranslated" => "Не переведено", _ => Status };
+    public string StatusLabel => Applied ? "Применено" : Status switch { "FromMemory" => "Память", "Translated" => "Переведено", "Manual" => "Вручную", "SourceChanged" => "Источник изменён", "ValidationError" or "Failed" => "Ошибка", "NotTranslated" => "Не переведено", "Queued" => "В очереди", "Translating" => "Перевод…", "Cancelled" => "Отменено", _ => Status };
     public string LocalizationSlot { get; init; } = "";
     public string Slot => LocalizationSlot.Length > 0 ? LocalizationSlot : GameLocalizer.Core.Localization.ActiveLocalizationResolver.SlotFromPath(File);
     public required string Key { get; init; }
