@@ -4,7 +4,7 @@ Open-source Windows application for creating Russian localizations for PC games.
 
 **Project is in early development.** Version 0.3.0 adds a per-user Windows installer, installed-mode updates with verified startup and rollback, and explicit data-preserving uninstall. BepInEx/XUnity keys never reach the model and remain unchanged during Apply. Real offline English → Russian translation and conservative text selection are retained. Review every translation before applying it.
 
-[Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues)
+[Repository](https://github.com/koteiik/GameLocalizer) · [Releases and downloads](https://github.com/koteiik/GameLocalizer/releases) · [Report a problem](https://github.com/koteiik/GameLocalizer/issues) · [Documentation](docs/README.md)
 
 ## Features
 - Steam library discovery and manual folder selection.
